@@ -2,12 +2,12 @@ import { withAuth } from "next-auth/middleware";
 import createIntlMiddleware from "next-intl/middleware";
 import { NextRequest } from "next/server";
 
-const locales = ["en", "vi"];
+const locales = ["vi"];
 const privatePages = ["/private"];
 
 const intlMiddleware = createIntlMiddleware({
   locales,
-  defaultLocale: "en",
+  defaultLocale: "vi",
 });
 
 const authMiddleware = withAuth(

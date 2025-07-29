@@ -33,8 +33,9 @@ function NavigateHome() {
   const localActive = useLocale();
   let current = usePathname();
   const handleLogout = async () => {
+    console.log(process.env.NEXT_PUBLIC_API_URL);
     const response = await fetchData(
-      "http://localhost:8000/api/v1/auth/logout",
+      `${process.env.NEXT_PUBLIC_API_URL}/auth/logout`,
       {
         headers: {
           Authorization: `Bearer ${session?.access_token}`,
@@ -54,9 +55,8 @@ function NavigateHome() {
     return (
       <div className="relative  ml-2">
         <button
-          className={`setting-button font-medium ${
-            isShow ? "text-white" : "text-black"
-          } dark:text-gray-200 px-4 py-2 rounded-md w-full `}
+          className={`setting-button font-medium ${isShow ? "text-white" : "text-black"
+            } dark:text-gray-200 px-4 py-2 rounded-md w-full `}
           onClick={() => {
             const settingMenu = document.querySelector(".setting-menu");
             //@ts-ignore
@@ -73,9 +73,7 @@ function NavigateHome() {
             <li className="text-lg py-[5px] flex justify-end items-end border-b pr-3">
               <SwitchTheme />
             </li>
-            <li className="text-lg py-[4px] pl-4 border-b pr-3">
-              <LocalSwitcher></LocalSwitcher>
-            </li>
+
 
             <li className=" border-b text-lg w-full ">
               {session ? (

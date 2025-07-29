@@ -1,28 +1,33 @@
-import NextAuth, { DefaultSession } from "next-auth";
-import { JWT } from "next-auth/jwt";
-interface IUser {
-  _id: string;
-  name: string;
-  email: string;
-}
-declare module "next-auth/jwt" {
-  /**
-   * Returned by `useSession`, `getSession` and received as a prop on the `SessionProvider` React Context
-   */
+import NextAuth from "next-auth";
+import { JWT as DefaultJWT } from "next-auth/jwt";
 
-  interface JWT {
+export interface IStaff {
+  name: string;
+  phone: string;
+  avatar: string;
+  email: string;
+  zalo_id: number | null;
+  gender: string;
+  address: string;
+  city: string;
+  ward: string;
+  status: string;
+  created_at: string;
+  role: string;
+}
+
+declare module "next-auth/jwt" {
+  interface JWT extends DefaultJWT {
     access_token: string;
-    refreshToken: string;
-    user: IUser;
+    refresh_token: string;
+    staff: IStaff;
   }
 }
+
 declare module "next-auth" {
-  /**
-   * Returned by `useSession`, `getSession` and received as a prop on the `SessionProvider` React Context
-   */
   interface Session {
     access_token: string;
-    refreshToken: string;
-    user: IUser;
+    refresh_token: string;
+    staff: IStaff;
   }
 }

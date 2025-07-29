@@ -1,184 +1,158 @@
-import axios, { AxiosResponse } from "axios";
-
-import GithubProvider from "next-auth/providers/github";
-import GoogleProvider from "next-auth/providers/google";
+import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { AuthOptions } from "next-auth";
-async function fetchData(url: string, body: any) {
-  // You can await here
-  try {
-    const response: AxiosResponse = await axios.post(url, body);
 
-    return response.data;
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+export async function loginByPhone({
+  phone,
+  password,
+}: {
+  phone: string;
+  password: string;
+}) {
+  try {
+
+
+    const response = await axios.post(`${API_URL}/auth/login`, {
+      phone,
+      password,
+    });
+
+    return response.data.data; // { tokens, staff }
   } catch (error: any) {
+    console.error("API error:", error.response?.data || error.message);
     return {
-      statusCode: error?.response?.data?.statusCode ?? 400,
-      error: error?.response?.data?.error ?? "error",
-      message: error?.response?.data?.message ?? "message",
+      error: true,
+      message: error?.response?.data?.message || "Đăng nhập thất bại",
     };
   }
 }
-async function GetUser(url: string, body: any) {
-  // You can await here
-  try {
-    const response: AxiosResponse = await axios.get(url, body);
 
-    return response.data;
+export async function getStaffInfo(accessToken: string) {
+  try {
+    const config: AxiosRequestConfig = {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    };
+    const response: AxiosResponse = await axios.get(`${API_URL}/auth/profile`, config);
+    return { data: response.data, error: false };
   } catch (error: any) {
     return {
-      statusCode: error?.response?.data?.statusCode ?? 400,
-      error: error?.response?.data?.error ?? "error",
-      message: error?.response?.data?.message ?? "message",
+      error: true,
+      message: error?.response?.data?.message || "Không thể lấy thông tin nhân viên",
     };
   }
 }
-async function resetToken(url: string, body: any) {
-  // You can await here
-  try {
-    const response: AxiosResponse = await axios.post(url, body);
 
-    return response.data;
+export async function refreshToken(refresh_token: string) {
+  try {
+    const response: AxiosResponse = await axios.post(`${API_URL}/auth/refresh-token`, {
+      refreshToken: refresh_token,
+    });
+    return { data: response.data, error: false };
   } catch (error: any) {
     return {
-      statusCode: error?.response?.data?.statusCode ?? 400,
-      error: error?.response?.data?.error ?? "error",
-      message: error?.response?.data?.message ?? "message",
+      error: true,
+      message: error?.response?.data?.message || "Refresh token thất bại",
     };
   }
 }
+
 export const authOptions: AuthOptions = {
-  // Configure one or more authentication providers
   secret: process.env.NEXTAUTH_SECRET,
-
+  pages: { signIn: "/auth/login" },
+  session: { strategy: "jwt" },
   providers: [
-    //su ly dl cho callback jwt
     CredentialsProvider({
-      name: "Username and Password",
-
+      name: "credentials",
       credentials: {
-        username: { label: "Username", type: "text" },
+        phone: { label: "Phone", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials, req) {
-        // Add logic here to look up the user from the credentials supplied
+      async authorize(credentials) {
+        try {
+          const res = await loginByPhone({
+            phone: credentials?.phone!,
+            password: credentials?.password!,
+          });
 
-        const response = await fetchData(
-          "http://localhost:8000/api/v1/auth/loginByEmail",
-          {
-            username: credentials?.username,
-            password: credentials?.password,
+          if (res?.tokens && res?.staff) {
+            return {
+              ...res.staff,
+              tokens: {
+                access_token: res.tokens.access_token,
+                refresh_token: res.tokens.refresh_token,
+              },
+            };
+          } else {
+            throw new Error(res?.message);
           }
-        );
+        } catch (err) {
 
-        if (response.error) {
-          throw new Error(response.message);
-        } else {
-          return response.data as any;
+          throw new Error(err as string);
+
         }
       },
     }),
-    GithubProvider({
-      clientId: process.env.GITHUB_ID!,
-      clientSecret: process.env.GITHUB_SECRET!,
-    }),
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-
-    // ...add more providers here
   ],
 
   callbacks: {
     async jwt({ token, user, account, trigger, session }) {
-      //neu dn bang ben thu 3
-      if (trigger === "signIn" && account?.provider !== "credentials") {
-        const response = await fetchData(
-          "http://localhost:8000/api/v1/auth/loginbySocial",
-          {
-            email: user.email,
-            name: user.name,
-            type: account?.provider,
-          }
-        );
-
-        if (response.error) {
-          return response.error;
-        } else {
-          token.access_token = response.data.access_token;
-          token.user = response.data.user;
-          token.refreshToken = response.data.refreshToken;
-        }
-      }
-      //neu dn bang tk mk
-      else if (trigger === "signIn" && account?.provider === "credentials") {
-        //@ts-ignore
-        token.access_token = user?.access_token;
-        //@ts-ignore
-        token.user = user?.user;
-        //@ts-ignore
-        token.refreshToken = user?.refreshToken;
+      if (trigger === "signIn" && account?.provider === "credentials") {
+        // Lưu token lần đầu khi login
+        console.warn("run test")
+        // @ts-ignore
+        token.access_token = user?.tokens?.access_token;
+        // @ts-ignore
+        token.refresh_token = user?.tokens?.refresh_token;
+        // @ts-ignore
+        token.staff = user?.staff;
       } else if (trigger === "update" && session?.name) {
-        // Note, that `session` can be any arbitrary object, remember to validate it!
-
-        token.user.name = session.name;
+        token.staff.name = session.name;
       } else {
-        //get user info
-        // console.log();
-
-        const response = await GetUser(
-          "http://localhost:8000/api/v1/auth/account",
-          {
-            headers: {
-              Authorization: `Bearer ${token.access_token}`,
-            },
-          }
-        );
-
+        // Khi rehydrate lại session
+        const response = await getStaffInfo(token.access_token as string);
         if (!response.error) {
-          token.user = response.data.user;
+          token.staff = response.data.staff;
         } else {
-          const responseReset = await resetToken(
-            "http://localhost:8000/api/v1/auth/refresh",
-            {
-              refreshToken: token.refreshToken,
-              accessToken: token.access_token,
-            }
-          );
+          const responseReset = await refreshToken(token.refresh_token as string);
+
           if (!responseReset.error) {
-            token.user = responseReset.data.user;
-            token.access_token = responseReset.data.access_token;
+            const accessToken = responseReset.data.access_token;
+            const staffInfo = await getStaffInfo(accessToken);
+
+            if (!staffInfo.error) {
+              token.staff = staffInfo.data.staff;
+              token.access_token = accessToken;
+            } else {
+              throw new Error("Không thể load lại thông tin nhân viên sau khi refresh token.");
+            }
           } else {
             throw new Error(responseReset.message);
           }
         }
       }
+
       return token;
     },
-    async session({ session, user, token, trigger, newSession }) {
+
+    async session({ session, token }) {
       if (token) {
-        if (token.access_token || token.refresh_token || token.user) {
-          if (token.access_token) {
-            session.access_token = token.access_token;
-          }
-          if (token.user) {
-            session.user = token.user;
-          }
-          if (token.refreshToken) {
-            session.refreshToken = token.refreshToken;
-          }
+        if (token.access_token) {
+          session.access_token = token.access_token;
+        }
+        if (token.refresh_token) {
+          session.refresh_token = token.refresh_token;
+        }
+        if (token.staff) {
+          session.staff = token.staff;
         }
         return session;
       } else {
-        throw new Error("loi k xac dinh");
+        throw new Error("Lỗi không xác định khi tạo session");
       }
     },
   },
-  // pages: {
-  //   signIn: "/auth/login",
-  //   signOut: "/auth/signout",
-  //   error: "/auth/error", // Error code passed in query string as ?error=
-  //   verifyRequest: "/auth/verify-request", // (used for check email message)
-  //   newUser: "/auth/new-user", // New users will be directed here on first sign in (leave the property out if not of interest)
-  // },
 };

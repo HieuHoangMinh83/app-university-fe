@@ -29,21 +29,7 @@ export default function LocalSwitcher() {
   };
   return (
     <div className=" dark:border-[#686868] flex items-center ">
-      <label className="border-2 rounded ml-auto">
-        <select
-          defaultValue={localActive}
-          className="bg-transparent p-1 text-base dark:text-gray-200"
-          onChange={onSelectChange}
-          disabled={isPending}
-        >
-          <option value="en" className="dark:text-black">
-            English
-          </option>
-          <option value="vi" className="dark:text-black">
-            Viet Nam
-          </option>
-        </select>
-      </label>
+
     </div>
   );
 }

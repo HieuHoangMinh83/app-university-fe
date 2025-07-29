@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 export default async function SigninPage() {
   const session = await getServerSession(authOptions);
   if (session) {
-    redirect("/en"); // chuyen huong ben server
+    redirect("/vi"); // chuyen huong ben server
     //chuyen huong ben client useRouter ->push
   }
 

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default async function SigninPage() {
   const session = await getServerSession(authOptions);
   if (session) {
-    redirect("/en");
+    redirect("/vi");
   }
   return <Register></Register>;
 }
