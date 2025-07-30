@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 
 import CmpHome from "@/components/Home/cmpHome";
 import { authOptions } from "../utils/authOptions";
+import Dashboard from "@/components/dashboard";
 
 export const metadata: Metadata = {
   title: "Home page",
@@ -11,5 +12,6 @@ export const metadata: Metadata = {
 export default async function HomePage() {
   const session = await getServerSession(authOptions);
 
-  return <CmpHome />;
+
+  return <Dashboard serverSession={session} />;
 }

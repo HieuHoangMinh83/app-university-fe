@@ -4,7 +4,7 @@ import MainHome from "./bodyHome/mainHome";
 import NavigateHome from "../header/header";
 import Loading from "../Loadingpage/loading";
 import { useEffect, useState } from "react";
-import { useThemeContext } from "@/library/ThemeProvider";
+import { useThemeContext } from "@/lib/providers/ThemeProvider";
 
 function CmpHome() {
   const { status } = useSession({

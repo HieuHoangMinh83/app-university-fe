@@ -20,7 +20,7 @@ declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     access_token: string;
     refresh_token: string;
-    staff: IStaff;
+    staffInfo: IStaff;
   }
 }
 
@@ -28,6 +28,6 @@ declare module "next-auth" {
   interface Session {
     access_token: string;
     refresh_token: string;
-    staff: IStaff;
+    staffInfo: IStaff;
   }
 }

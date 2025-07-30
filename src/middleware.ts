@@ -2,45 +2,36 @@ import { withAuth } from "next-auth/middleware";
 import createIntlMiddleware from "next-intl/middleware";
 import { NextRequest } from "next/server";
 
+// Cấu hình locale cho next-intl
 const locales = ["vi"];
-const privatePages = ["/private"];
 
 const intlMiddleware = createIntlMiddleware({
   locales,
   defaultLocale: "vi",
 });
 
+// Bọc toàn bộ route với middleware đăng nhập, trừ /auth/*
 const authMiddleware = withAuth(
-  // Note that this callback is only invoked if
-  // the `authorized` callback has returned `true`
-  // and not for pages listed in `pages`.
-  function onSuccess(req) {
-    return intlMiddleware(req);
-  },
+  (req) => intlMiddleware(req), // tích hợp với next-intl
   {
     callbacks: {
-      authorized: ({ token }) => token != null,
+      authorized: ({ token }) => !!token,
     },
     pages: {
-      signIn: `auth/login`,
+      signIn: "/auth/login",
     },
   }
 );
 
+// Middleware chính
 export default function middleware(req: NextRequest) {
-  let isAuth = false;
-  privatePages.map((path) => {
-    if (req.nextUrl.pathname.includes(path)) {
-      isAuth = true;
-    }
-  });
-  if (isAuth) {
-    return (authMiddleware as any)(req);
-  } else {
-    return intlMiddleware(req);
-  }
-}
+  const { pathname } = req.nextUrl;
 
-export const config = {
-  matcher: ["/((?!api|_next|.*\\..*).*)"],
-};
+  // ❌ Bỏ qua auth middleware với bất kỳ route /auth/*
+  if (pathname.startsWith("/auth") || pathname.startsWith("/vi/auth")) {
+    return intlMiddleware(req); // chỉ xử lý locale
+  }
+
+  // ✅ Các route còn lại đều qua authMiddleware + intl
+  return (authMiddleware as any)(req);
+}

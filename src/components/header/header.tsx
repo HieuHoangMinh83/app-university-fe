@@ -8,7 +8,7 @@ import { Toast } from "primereact/toast";
 import { useEffect, useRef, useState } from "react";
 import axios, { AxiosResponse } from "axios";
 import SwitchTheme from "@/components/switchbtn/switch.btn";
-import { useThemeContext } from "@/library/ThemeProvider";
+import { useThemeContext } from "@/lib/providers/ThemeProvider";
 import LocalSwitcher from "../SwitchLangue/switcherLangue";
 import { usePathname, useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
@@ -33,7 +33,6 @@ function NavigateHome() {
   const localActive = useLocale();
   let current = usePathname();
   const handleLogout = async () => {
-    console.log(process.env.NEXT_PUBLIC_API_URL);
     const response = await fetchData(
       `${process.env.NEXT_PUBLIC_API_URL}/auth/logout`,
       {

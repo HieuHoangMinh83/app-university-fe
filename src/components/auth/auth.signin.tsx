@@ -9,7 +9,7 @@ import logo from "../../../public/image/login.webp"; // with import
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import SwitchTheme from "../switchbtn/switch.btn";
-import { useThemeContext } from "@/library/ThemeProvider";
+import { useThemeContext } from "@/lib/providers/ThemeProvider";
 import LocalSwitcher from "../SwitchLangue/switcherLangue";
 import { useTranslations } from "next-intl";
 function Login() {

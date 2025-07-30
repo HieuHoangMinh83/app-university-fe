@@ -1,5 +1,5 @@
 "use client";
-import { useThemeContext } from "@/library/ThemeProvider";
+import { useThemeContext } from "@/lib/providers/ThemeProvider";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 function SwitchTheme() {

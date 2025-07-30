@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import Loading from "@/components/Loadingpage/loading";
 import NavigateHome from "@/components/header/header";
 import { useEffect, useState } from "react";
-import { useThemeContext } from "@/library/ThemeProvider";
+import { useThemeContext } from "@/lib/providers/ThemeProvider";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 

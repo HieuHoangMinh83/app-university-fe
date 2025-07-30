@@ -8,7 +8,7 @@ import logo from "../../../public/image/register.webp";
 import { useRef } from "react";
 import Image from "next/image";
 import SwitchTheme from "../switchbtn/switch.btn";
-import { useThemeContext } from "@/library/ThemeProvider";
+import { useThemeContext } from "@/lib/providers/ThemeProvider";
 import { useTranslations } from "next-intl";
 import LocalSwitcher from "../SwitchLangue/switcherLangue";
 import { useForm } from "react-hook-form";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useThemeContext } from "@/library/ThemeProvider";
+import { useThemeContext } from "@/lib/providers/ThemeProvider";
 
 function Themefull({ children }: { children: React.ReactNode }) {
   const { theme, toggleTheme } = useThemeContext();
