@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { clientsApi } from "@/services/api/clients"
-import { ordersApi, Order } from "@/services/api/orders"
+import { Order } from "@/services/api/orders"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -23,11 +23,8 @@ export default function ClientDetailPage() {
     enabled: !!clientId,
   })
 
-  const { data: orders, isLoading: isLoadingOrders } = useQuery({
-    queryKey: ["orders", clientId],
-    queryFn: () => ordersApi.getAll(clientId),
-    enabled: !!clientId,
-  })
+  // Orders are included in the client response
+  const orders = client?.orders || []
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("vi-VN", {
@@ -203,7 +200,7 @@ export default function ClientDetailPage() {
             <CardTitle>Danh sách đơn hàng</CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoadingOrders ? (
+            {isLoadingClient ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin" />
               </div>

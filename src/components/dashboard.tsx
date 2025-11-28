@@ -108,7 +108,7 @@ export default function Dashboard({ serverSession }: { serverSession?: any }) {
                                         <Line type="monotone" dataKey="value" stroke="#f59e0b" strokeWidth={2} dot={false} />
                                     </LineChart>
                                 </ResponsiveContainer>
-                            </div>
+                    </div>
                         </CardContent>
                     </Card>
                 </div>
@@ -133,12 +133,12 @@ export default function Dashboard({ serverSession }: { serverSession?: any }) {
                                             >
                                                 <div className={`${action.color} p-3 rounded-lg mb-2`}>
                                                     <Icon className="h-6 w-6 text-white" />
-                                                </div>
+                </div>
                                                 <span className="text-xs text-center font-medium">{action.label}</span>
                                             </Link>
                                         )
                                     })}
-                                </div>
+            </div>
                             </CardContent>
                         </Card>
                     </div>
@@ -177,10 +177,10 @@ export default function Dashboard({ serverSession }: { serverSession?: any }) {
                         </div>
                         <div className="mt-4 text-sm text-gray-600 text-center">
                             Số order mỗi ngày của {session?.staffInfo?.name || "SG - Quận 10"}
-                        </div>
+                </div>
                     </CardContent>
                 </Card>
             </div>
         </DashboardLayout>
     )
-}
+} 

@@ -1,4 +1,5 @@
 import apiClient from "@/lib/api-client";
+import { Order } from "./orders";
 
 export interface Client {
   id: string;
@@ -14,6 +15,7 @@ export interface Client {
   _count?: {
     orders: number;
   };
+  orders?: Order[]; // Orders included when fetching by ID
 }
 
 export interface CreateClientDto {

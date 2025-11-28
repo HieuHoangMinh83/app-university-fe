@@ -103,13 +103,13 @@ export default function CreateProductPage() {
               <div>
                 <Label htmlFor="categoryId">Danh mục</Label>
                 <Select
-                  onValueChange={(value) => setValue("categoryId", value)}
+                  onValueChange={(value) => setValue("categoryId", value === "none" ? undefined : value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Chọn danh mục" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Không có danh mục</SelectItem>
+                    <SelectItem value="none">Không có danh mục</SelectItem>
                     {categories?.map?.((category) => (
                       <SelectItem key={category?.id} value={category?.id}>
                         {category?.name}

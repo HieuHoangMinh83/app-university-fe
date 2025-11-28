@@ -16,11 +16,12 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useForm } from "react-hook-form"
-import { ArrowLeft, Pencil, Trash2, Plus, Loader2 } from "lucide-react"
+import { ArrowLeft, Pencil, Trash2, Plus, Loader2, Package, Tag, Box, Calendar, FileText, Image as ImageIcon } from "lucide-react"
 import { toast } from "sonner"
 import DashboardLayout from "@/components/dashboard-layout"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
+import Image from "next/image"
 
 export default function ProductDetailPage() {
   const params = useParams()
@@ -28,6 +29,7 @@ export default function ProductDetailPage() {
   const productId = params.id as string
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isAddComboOpen, setIsAddComboOpen] = useState(false)
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const queryClient = useQueryClient()
 
   const { data: product, isLoading } = useQuery({
@@ -155,9 +157,12 @@ export default function ProductDetailPage() {
     )
   }
 
+  const activeCombos = product?.combos?.filter((combo) => combo?.isActive) || []
+
   return (
     <DashboardLayout>
-      <div className="space-y-6 max-w-6xl mx-auto">
+      <div className="space-y-6 w-full px-4 md:px-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/products">
@@ -166,8 +171,18 @@ export default function ProductDetailPage() {
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-bold">{product?.name}</h1>
-              <p className="text-sm text-gray-500">{product?.category?.name || "Không có danh mục"}</p>
+              <h1 className="text-3xl font-bold">{product?.name}</h1>
+              <div className="flex items-center gap-2 mt-2">
+                {product?.category?.name && (
+                  <Badge variant="outline" className="text-xs">
+                    <Tag className="h-3 w-3 mr-1" />
+                    {product.category.name}
+                  </Badge>
+                )}
+                <Badge variant={product?.isActive ? "default" : "secondary"} className="text-xs">
+                  {product?.isActive ? "Hoạt động" : "Không hoạt động"}
+                </Badge>
+              </div>
             </div>
           </div>
           <div className="flex gap-2">
@@ -182,62 +197,140 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="info" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="info">Thông tin</TabsTrigger>
-            <TabsTrigger value="combos">Combos</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="info" className="space-y-4">
+        {/* Main Content - 2 Columns */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Left Column - Images */}
+          <div className="lg:col-span-1">
             <Card>
               <CardHeader>
-                <CardTitle>Thông tin sản phẩm</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ImageIcon className="h-5 w-5" />
+                  Hình ảnh sản phẩm
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-500">Tên sản phẩm</p>
-                  <p className="font-medium">{product?.name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Mô tả</p>
-                  <p className="font-medium">{product?.description || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Danh mục</p>
-                  <p className="font-medium">{product?.category?.name || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Số lượng</p>
-                  <p className="font-medium">{product?.quantity}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Trạng thái</p>
-                  <Badge variant={product?.isActive ? "default" : "secondary"}>
-                    {product?.isActive ? "Hoạt động" : "Không hoạt động"}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Ngày tạo</p>
-                  <p className="font-medium">
-                    {product?.createdAt ? new Date(product.createdAt).toLocaleDateString("vi-VN") : "-"}
-                  </p>
-                </div>
+                {product?.images && product.images.length > 0 ? (
+                  <>
+                    {/* Main Image */}
+                    <div className="relative aspect-square w-full rounded-lg overflow-hidden border-2 border-gray-200 bg-gray-50">
+                      <Image
+                        src={product.images[selectedImageIndex]?.url || ""}
+                        alt={product?.name || "Product image"}
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                    {/* Thumbnails */}
+                    {product.images.length > 1 && (
+                      <div className="grid grid-cols-4 gap-2">
+                        {product.images.map((img, index) => (
+                          <button
+                            key={img?.id}
+                            onClick={() => setSelectedImageIndex(index)}
+                            className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                              selectedImageIndex === index
+                                ? "border-blue-500 ring-2 ring-blue-200"
+                                : "border-gray-200 hover:border-gray-300"
+                            }`}
+                          >
+                            <Image
+                              src={img?.url || ""}
+                              alt={`${product?.name} - Image ${index + 1}`}
+                              fill
+                              className="object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="relative aspect-square w-full rounded-lg overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center">
+                    <div className="text-center text-gray-400">
+                      <ImageIcon className="h-12 w-12 mx-auto mb-2" />
+                      <p className="text-sm">Chưa có hình ảnh</p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
 
-          <TabsContent value="combos" className="space-y-4">
+          {/* Right Column - Info & Combos */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Product Info */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Thông tin sản phẩm
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                      <Package className="h-4 w-4" />
+                      Tên sản phẩm
+                    </p>
+                    <p className="text-base font-semibold text-gray-900">{product?.name}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                      <Tag className="h-4 w-4" />
+                      Danh mục
+                    </p>
+                    <p className="text-base font-semibold text-gray-900">{product?.category?.name || "-"}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                      <Box className="h-4 w-4" />
+                      Số lượng tồn kho
+                    </p>
+                    <p className="text-base font-semibold text-gray-900">{product?.quantity || 0} sản phẩm</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Ngày tạo
+                    </p>
+                    <p className="text-base font-semibold text-gray-900">
+                      {product?.createdAt
+                        ? new Date(product.createdAt).toLocaleDateString("vi-VN", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })
+                        : "-"}
+                    </p>
+                  </div>
+                </div>
+                {product?.description && (
+                  <div className="mt-6 pt-6 border-t">
+                    <p className="text-sm font-medium text-gray-500 mb-2">Mô tả</p>
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                      {product.description}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Combos Section */}
             <Card>
               <CardHeader className="flex items-center justify-between">
-                <CardTitle>Danh sách Combos</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Package className="h-5 w-5" />
+                  Danh sách Combos ({activeCombos.length})
+                </CardTitle>
                 <Dialog open={isAddComboOpen} onOpenChange={setIsAddComboOpen}>
                   <DialogTrigger asChild>
-                    <Button>
+                    <Button size="sm">
                       <Plus className="mr-2 h-4 w-4" />
                       Thêm combo
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                       <DialogTitle>Thêm combo mới</DialogTitle>
                     </DialogHeader>
@@ -250,6 +343,7 @@ export default function ProductDetailPage() {
                         <Input
                           id="combo-name"
                           {...registerCombo("name", { required: "Tên combo là bắt buộc" })}
+                          placeholder="Nhập tên combo"
                         />
                       </div>
                       <div>
@@ -262,6 +356,7 @@ export default function ProductDetailPage() {
                             valueAsNumber: true,
                             min: { value: 1 }
                           })}
+                          placeholder="0"
                         />
                       </div>
                       <div>
@@ -270,6 +365,7 @@ export default function ProductDetailPage() {
                           id="combo-quantity"
                           type="number"
                           {...registerCombo("quantity", { valueAsNumber: true, min: 1 })}
+                          placeholder="1"
                         />
                       </div>
                       <div className="flex items-center space-x-2">
@@ -279,69 +375,94 @@ export default function ProductDetailPage() {
                         />
                         <Label>Kích hoạt</Label>
                       </div>
-                      <Button type="submit" disabled={addComboMutation.isPending}>
-                        {addComboMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Thêm
-                      </Button>
+                      <div className="flex justify-end gap-2 pt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsAddComboOpen(false)}
+                        >
+                          Hủy
+                        </Button>
+                        <Button type="submit" disabled={addComboMutation.isPending}>
+                          {addComboMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Thêm
+                        </Button>
+                      </div>
                     </form>
                   </DialogContent>
                 </Dialog>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Tên combo</TableHead>
-                      <TableHead>Giá</TableHead>
-                      <TableHead>Giá khuyến mại</TableHead>
-                      <TableHead>Số lượng</TableHead>
-                      <TableHead>Trạng thái</TableHead>
-                      <TableHead className="text-right">Thao tác</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {product?.combos?.length > 0 ? (
-                      product?.combos?.map((combo) => (
-                      <TableRow key={combo?.id}>
-                        <TableCell className="font-medium">{combo?.name}</TableCell>
-                        <TableCell>{combo?.price ? formatPrice(combo.price) : "-"}</TableCell>
-                        <TableCell>
-                          {combo?.promotionalPrice && combo?.isPromotionActive ? (
-                            <span className="text-red-500">{formatPrice(combo.promotionalPrice)}</span>
-                          ) : (
-                            "-"
-                          )}
-                        </TableCell>
-                        <TableCell>{combo?.quantity}</TableCell>
-                        <TableCell>
-                          <Badge variant={combo?.isActive ? "default" : "secondary"}>
-                            {combo?.isActive ? "Hoạt động" : "Không hoạt động"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
+                {activeCombos.length > 0 ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {activeCombos.map((combo) => (
+                      <div
+                        key={combo?.id}
+                        className="p-4 border rounded-lg hover:shadow-md transition-all bg-white"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-base mb-2 text-gray-900">{combo?.name}</h3>
+                            {combo?.isPromotionActive && (
+                              <Badge variant="destructive" className="text-xs mb-2">
+                                🔥 Khuyến mại
+                              </Badge>
+                            )}
+                          </div>
                           <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => handleDeleteCombo(combo?.id)}
+                            className="h-8 w-8 text-gray-400 hover:text-red-500"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        </TableCell>
-                      </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                          Không có combo nào
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            {combo?.promotionalPrice && combo?.isPromotionActive ? (
+                              <>
+                                <span className="text-sm line-through text-gray-400">
+                                  {formatPrice(combo.price)}
+                                </span>
+                                <span className="text-xl font-bold text-gray-900">
+                                  {formatPrice(combo.promotionalPrice)}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-xl font-semibold text-gray-900">
+                                {formatPrice(combo?.price || 0)}
+                              </span>
+                            )}
+                          </div>
+                          {combo?.quantity !== undefined && (
+                            <p className="text-xs text-gray-500">
+                              Số lượng: {combo.quantity} sản phẩm
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500">
+                    <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                    <p className="text-sm">Chưa có combo nào</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      onClick={() => setIsAddComboOpen(true)}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Thêm combo đầu tiên
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
 
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
@@ -370,14 +491,14 @@ export default function ProductDetailPage() {
               <div>
                 <Label htmlFor="edit-categoryId">Danh mục</Label>
                 <Select
-                  value={watchEdit("categoryId") || ""}
-                  onValueChange={(value) => setValueEdit("categoryId", value || undefined)}
+                  value={watchEdit("categoryId") || "none"}
+                  onValueChange={(value) => setValueEdit("categoryId", value === "none" ? undefined : value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Chọn danh mục" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Không có danh mục</SelectItem>
+                    <SelectItem value="none">Không có danh mục</SelectItem>
                     {categories?.map?.((category) => (
                       <SelectItem key={category?.id} value={category?.id}>
                         {category?.name}
