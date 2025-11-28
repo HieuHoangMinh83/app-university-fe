@@ -144,116 +144,114 @@ export default function CustomersPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Danh sách Khách hàng</h1>
-          <Dialog open={isCreateOpen} onOpenChange={handleCreateDialogClose}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Tạo khách hàng mới
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader className="pb-4 border-b">
-                <DialogTitle className="text-xl font-semibold">Tạo khách hàng mới</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmitCreate(onSubmitCreate)} className="space-y-5 pt-2">
-                <div className="space-y-2">
-                  <Label htmlFor="create-name" className="text-sm font-medium">
-                    Tên khách hàng <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="create-name"
-                    className="h-10"
-                    {...registerCreate("name", { required: "Tên khách hàng là bắt buộc" })}
-                    placeholder="Nhập tên khách hàng"
-                  />
-                  {createErrors.name && (
-                    <p className="text-sm text-red-500 mt-1">{createErrors.name.message}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-phone" className="text-sm font-medium">
-                    Số điện thoại <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="create-phone"
-                    className="h-10"
-                    {...registerCreate("phone", { 
-                      required: "Số điện thoại là bắt buộc",
-                      pattern: {
-                        value: /^(03|05|07|08|09)[0-9]{8}$/,
-                        message: "Số điện thoại phải là 10 số, bắt đầu bằng 03, 05, 07, 08, 09"
-                      }
-                    })}
-                    placeholder="0388888888"
-                  />
-                  {createErrors.phone && (
-                    <p className="text-sm text-red-500 mt-1">{createErrors.phone.message}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-address" className="text-sm font-medium">
-                    Địa chỉ
-                  </Label>
-                  <Input
-                    id="create-address"
-                    className="h-10"
-                    {...registerCreate("address")}
-                    placeholder="123 Đường ABC, Quận 1, TP.HCM"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">
-                    Ảnh đại diện
-                  </Label>
-                  <ImageUpload
-                    value={createAvatarUrl}
-                    onChange={(url) => {
-                      setValueCreate('avatar', url)
-                      if (url && url.includes('supabase.co')) {
-                        setCreateOldImageUrl(url)
-                      }
-                    }}
-                    folder="client-avatars"
-                    disabled={createMutation.isPending}
-                  />
-                  <input
-                    type="hidden"
-                    {...registerCreate("avatar")}
-                  />
-                </div>
-                <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsCreateOpen(false)}
-                    disabled={createMutation.isPending}
-                  >
-                    Hủy
-                  </Button>
-                  <Button type="submit" disabled={createMutation.isPending}>
-                    {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Tạo khách hàng
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
-
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Khách hàng</CardTitle>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Tìm kiếm theo tên hoặc số điện thoại..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
+              <div className="flex items-center gap-3">
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Tìm kiếm theo tên hoặc số điện thoại..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Dialog open={isCreateOpen} onOpenChange={handleCreateDialogClose}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Tạo khách hàng mới
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader className="pb-4 border-b">
+                      <DialogTitle className="text-xl font-semibold">Tạo khách hàng mới</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleSubmitCreate(onSubmitCreate)} className="space-y-5 pt-2">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">
+                          Ảnh đại diện
+                        </Label>
+                        <ImageUpload
+                          value={createAvatarUrl}
+                          onChange={(url) => {
+                            setValueCreate('avatar', url)
+                            if (url && url.includes('supabase.co')) {
+                              setCreateOldImageUrl(url)
+                            }
+                          }}
+                          folder="client-avatars"
+                          disabled={createMutation.isPending}
+                        />
+                        <input
+                          type="hidden"
+                          {...registerCreate("avatar")}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="create-name" className="text-sm font-medium">
+                          Tên khách hàng <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          id="create-name"
+                          className="h-10"
+                          {...registerCreate("name", { required: "Tên khách hàng là bắt buộc" })}
+                          placeholder="Nhập tên khách hàng"
+                        />
+                        {createErrors.name && (
+                          <p className="text-sm text-red-500 mt-1">{createErrors.name.message}</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="create-phone" className="text-sm font-medium">
+                          Số điện thoại <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          id="create-phone"
+                          className="h-10"
+                          {...registerCreate("phone", { 
+                            required: "Số điện thoại là bắt buộc",
+                            pattern: {
+                              value: /^(03|05|07|08|09)[0-9]{8}$/,
+                              message: "Số điện thoại phải là 10 số, bắt đầu bằng 03, 05, 07, 08, 09"
+                            }
+                          })}
+                          placeholder="0388888888"
+                        />
+                        {createErrors.phone && (
+                          <p className="text-sm text-red-500 mt-1">{createErrors.phone.message}</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="create-address" className="text-sm font-medium">
+                          Địa chỉ
+                        </Label>
+                        <Input
+                          id="create-address"
+                          className="h-10"
+                          {...registerCreate("address")}
+                          placeholder="123 Đường ABC, Quận 1, TP.HCM"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-3 pt-4 border-t">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsCreateOpen(false)}
+                          disabled={createMutation.isPending}
+                        >
+                          Hủy
+                        </Button>
+                        <Button type="submit" disabled={createMutation.isPending}>
+                          {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Tạo khách hàng
+                        </Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
           </CardHeader>
@@ -349,6 +347,27 @@ export default function CustomersPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 pt-2">
                 <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Ảnh đại diện
+                  </Label>
+                  <ImageUpload
+                    value={editAvatarUrl}
+                    onChange={(url) => setValue('avatar', url)}
+                    folder="client-avatars"
+                    disabled={updateMutation.isPending}
+                    onDeleteOldImage={(url) => {
+                      // Xóa ảnh cũ khi component unmount (nếu không submit)
+                      if (url !== editOldImageUrl) {
+                        deleteImage(url)
+                      }
+                    }}
+                  />
+                  <input
+                    type="hidden"
+                    {...register("avatar")}
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="name" className="text-sm font-medium">
                     Tên khách hàng <span className="text-red-500">*</span>
                   </Label>
@@ -385,27 +404,6 @@ export default function CustomersPage() {
                     className="h-10"
                     {...register("address")}
                     placeholder="123 Đường ABC, Quận 1, TP.HCM"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">
-                    Ảnh đại diện
-                  </Label>
-                  <ImageUpload
-                    value={editAvatarUrl}
-                    onChange={(url) => setValue('avatar', url)}
-                    folder="client-avatars"
-                    disabled={updateMutation.isPending}
-                    onDeleteOldImage={(url) => {
-                      // Xóa ảnh cũ khi component unmount (nếu không submit)
-                      if (url !== editOldImageUrl) {
-                        deleteImage(url)
-                      }
-                    }}
-                  />
-                  <input
-                    type="hidden"
-                    {...register("avatar")}
                   />
                 </div>
                 <div className="flex justify-end gap-3 pt-4 border-t">

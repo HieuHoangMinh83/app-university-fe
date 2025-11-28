@@ -1,10 +1,5 @@
 import apiClient from "@/lib/api-client";
 
-export interface ProductImage {
-  id: string;
-  url: string;
-}
-
 export interface ComboGift {
   id: string;
   giftCombo: {
@@ -28,6 +23,7 @@ export interface Combo {
   price: number;
   quantity: number;
   isActive: boolean;
+  image: string | null;
   promotionalPrice?: number | null;
   promotionStart?: string | null;
   promotionEnd?: string | null;
@@ -39,14 +35,14 @@ export interface Product {
   id: string;
   name: string;
   description: string | null;
-  categoryId: string | null;
+  categoryId: string;
   category: {
     id: string;
     name: string;
   } | null;
   isActive: boolean;
   quantity: number;
-  images: ProductImage[];
+  image: string | null;
   combos: Combo[];
   createdBy: {
     id: string;
@@ -65,22 +61,23 @@ export interface Product {
 export interface CreateProductDto {
   name: string;
   description?: string;
-  categoryId?: string;
+  categoryId: string; // required
   isActive?: boolean;
   quantity?: number;
-  images?: Array<{ url: string }>;
+  image?: string; // chỉ 1 ảnh
   combos: Array<{
     name: string;
     price: number;
     quantity?: number;
     isActive?: boolean;
+    image?: string; // chỉ 1 ảnh
     promotionalPrice?: number;
     promotionStart?: string;
     promotionEnd?: string;
     isPromotionActive?: boolean;
     giftCombos?: Array<{
-      giftComboId: string;
-      quantity: number;
+      giftComboId: string; // có thể là UUID, index "0", "1", hoặc name "Combo 2"
+      quantity?: number;
     }>;
   }>;
 }
@@ -91,6 +88,7 @@ export interface UpdateProductDto {
   categoryId?: string;
   isActive?: boolean;
   quantity?: number;
+  image?: string; // chỉ 1 ảnh
 }
 
 export interface CreateComboDto {
@@ -98,6 +96,7 @@ export interface CreateComboDto {
   price: number;
   quantity?: number;
   isActive?: boolean;
+  image?: string; // chỉ 1 ảnh
   promotionalPrice?: number;
   promotionStart?: string;
   promotionEnd?: string;
@@ -109,6 +108,7 @@ export interface UpdateComboDto {
   price?: number;
   quantity?: number;
   isActive?: boolean;
+  image?: string; // chỉ 1 ảnh
   promotionalPrice?: number;
   promotionStart?: string;
   promotionEnd?: string;

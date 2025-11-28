@@ -104,7 +104,7 @@ export default function CategoriesPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
-                  <Label htmlFor="name">Tên danh mục *</Label>
+                  <Label htmlFor="name">Tên danh mục <span className="text-red-500">*</span></Label>
                   <Input
                     id="name"
                     {...register("name", { required: "Tên danh mục là bắt buộc" })}
@@ -202,7 +202,7 @@ export default function CategoriesPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
-                  <Label htmlFor="edit-name">Tên danh mục *</Label>
+                  <Label htmlFor="edit-name">Tên danh mục <span className="text-red-500">*</span></Label>
                   <Input
                     id="edit-name"
                     {...register("name", { required: "Tên danh mục là bắt buộc" })}

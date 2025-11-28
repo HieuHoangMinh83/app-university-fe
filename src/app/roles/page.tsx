@@ -101,7 +101,7 @@ export default function RolesPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
-                  <Label htmlFor="name">Tên role *</Label>
+                  <Label htmlFor="name">Tên role <span className="text-red-500">*</span></Label>
                   <Input
                     id="name"
                     {...register("name", { required: "Tên role là bắt buộc" })}
@@ -187,7 +187,7 @@ export default function RolesPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
-                  <Label htmlFor="edit-name">Tên role *</Label>
+                  <Label htmlFor="edit-name">Tên role <span className="text-red-500">*</span></Label>
                   <Input
                     id="edit-name"
                     {...register("name", { required: "Tên role là bắt buộc" })}

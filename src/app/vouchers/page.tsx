@@ -132,7 +132,7 @@ export default function VouchersPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
-                  <Label htmlFor="name">Tên voucher *</Label>
+                  <Label htmlFor="name">Tên voucher <span className="text-red-500">*</span></Label>
                   <Input
                     id="name"
                     {...register("name", { required: "Tên voucher là bắt buộc" })}
@@ -152,7 +152,7 @@ export default function VouchersPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="type">Loại voucher *</Label>
+                  <Label htmlFor="type">Loại voucher <span className="text-red-500">*</span></Label>
                   <Select
                     value={voucherType}
                     onValueChange={(value: VoucherType) => setValue("type", value)}
@@ -169,7 +169,7 @@ export default function VouchersPage() {
 
                 {voucherType === "FIXED" ? (
                   <div>
-                    <Label htmlFor="price">Giá giảm (VND) *</Label>
+                    <Label htmlFor="price">Giá giảm (VND) <span className="text-red-500">*</span></Label>
                     <Input
                       id="price"
                       type="number"
@@ -186,7 +186,7 @@ export default function VouchersPage() {
                 ) : (
                   <>
                     <div>
-                      <Label htmlFor="percent">Phần trăm giảm (%) *</Label>
+                      <Label htmlFor="percent">Phần trăm giảm (%) <span className="text-red-500">*</span></Label>
                       <Input
                         id="percent"
                         type="number"
@@ -353,7 +353,7 @@ export default function VouchersPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
-                  <Label htmlFor="edit-name">Tên voucher *</Label>
+                  <Label htmlFor="edit-name">Tên voucher <span className="text-red-500">*</span></Label>
                   <Input
                     id="edit-name"
                     {...register("name", { required: "Tên voucher là bắt buộc" })}
@@ -373,7 +373,7 @@ export default function VouchersPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="edit-type">Loại voucher *</Label>
+                  <Label htmlFor="edit-type">Loại voucher <span className="text-red-500">*</span></Label>
                   <Select
                     value={voucherType}
                     onValueChange={(value: VoucherType) => setValue("type", value)}
@@ -390,7 +390,7 @@ export default function VouchersPage() {
 
                 {voucherType === "FIXED" ? (
                   <div>
-                    <Label htmlFor="edit-price">Giá giảm (VND) *</Label>
+                    <Label htmlFor="edit-price">Giá giảm (VND) <span className="text-red-500">*</span></Label>
                     <Input
                       id="edit-price"
                       type="number"
@@ -407,7 +407,7 @@ export default function VouchersPage() {
                 ) : (
                   <>
                     <div>
-                      <Label htmlFor="edit-percent">Phần trăm giảm (%) *</Label>
+                      <Label htmlFor="edit-percent">Phần trăm giảm (%) <span className="text-red-500">*</span></Label>
                       <Input
                         id="edit-percent"
                         type="number"

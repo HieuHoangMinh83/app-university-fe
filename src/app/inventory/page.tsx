@@ -86,7 +86,7 @@ export default function InventoryPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
-                  <Label htmlFor="productId">Sản phẩm *</Label>
+                  <Label htmlFor="productId">Sản phẩm <span className="text-red-500">*</span></Label>
                   <Select
                     {...register("productId", { required: "Vui lòng chọn sản phẩm" })}
                   >
@@ -107,7 +107,7 @@ export default function InventoryPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="quantity">Số lượng *</Label>
+                  <Label htmlFor="quantity">Số lượng <span className="text-red-500">*</span></Label>
                   <Input
                     id="quantity"
                     type="number"
@@ -123,7 +123,7 @@ export default function InventoryPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="expiryDate">Ngày hết hạn *</Label>
+                  <Label htmlFor="expiryDate">Ngày hết hạn <span className="text-red-500">*</span></Label>
                   <Input
                     id="expiryDate"
                     type="datetime-local"

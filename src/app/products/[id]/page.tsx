@@ -91,12 +91,15 @@ export default function ProductDetailPage() {
     },
   })
 
-  const { register: registerEdit, handleSubmit: handleSubmitEdit, reset: resetEdit, watch: watchEdit, setValue: setValueEdit } = useForm<UpdateProductDto>()
-  const { register: registerCombo, handleSubmit: handleSubmitCombo, reset: resetCombo } = useForm<CreateComboDto>({
+  const { register: registerEdit, handleSubmit: handleSubmitEdit, reset: resetEdit, watch: watchEdit, setValue: setValueEdit, formState: { errors: editErrors } } = useForm<UpdateProductDto>({
+    mode: "onChange"
+  })
+  const { register: registerCombo, handleSubmit: handleSubmitCombo, reset: resetCombo, watch: watchCombo, setValue: setValueCombo, formState: { errors: comboErrors } } = useForm<CreateComboDto>({
     defaultValues: {
       isActive: true,
       quantity: 1,
-    }
+    },
+    mode: "onChange"
   })
 
   const handleEdit = () => {
@@ -106,7 +109,6 @@ export default function ProductDetailPage() {
         description: product?.description || "",
         categoryId: product?.categoryId || "",
         isActive: product?.isActive,
-        quantity: product?.quantity,
       })
       setIsEditOpen(true)
     }
@@ -209,41 +211,15 @@ export default function ProductDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {product?.images && product.images.length > 0 ? (
-                  <>
-                    {/* Main Image */}
-                    <div className="relative aspect-square w-full rounded-lg overflow-hidden border-2 border-gray-200 bg-gray-50">
-                      <Image
-                        src={product.images[selectedImageIndex]?.url || ""}
-                        alt={product?.name || "Product image"}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                    {/* Thumbnails */}
-                    {product.images.length > 1 && (
-                      <div className="grid grid-cols-4 gap-2">
-                        {product.images.map((img, index) => (
-                          <button
-                            key={img?.id}
-                            onClick={() => setSelectedImageIndex(index)}
-                            className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-                              selectedImageIndex === index
-                                ? "border-blue-500 ring-2 ring-blue-200"
-                                : "border-gray-200 hover:border-gray-300"
-                            }`}
-                          >
-                            <Image
-                              src={img?.url || ""}
-                              alt={`${product?.name} - Image ${index + 1}`}
-                              fill
-                              className="object-cover"
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </>
+                {product?.image ? (
+                  <div className="relative aspect-square w-full rounded-lg overflow-hidden border-2 border-gray-200 bg-gray-50">
+                    <Image
+                      src={product.image}
+                      alt={product?.name || "Product image"}
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
                 ) : (
                   <div className="relative aspect-square w-full rounded-lg overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center">
                     <div className="text-center text-gray-400">
@@ -339,7 +315,7 @@ export default function ProductDetailPage() {
                       resetCombo()
                     })} className="space-y-4">
                       <div>
-                        <Label htmlFor="combo-name">Tên combo *</Label>
+                        <Label htmlFor="combo-name">Tên combo <span className="text-red-500">*</span></Label>
                         <Input
                           id="combo-name"
                           {...registerCombo("name", { required: "Tên combo là bắt buộc" })}
@@ -347,17 +323,27 @@ export default function ProductDetailPage() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="combo-price">Giá (VND) *</Label>
+                        <Label htmlFor="combo-price">Giá (VND) <span className="text-red-500">*</span></Label>
                         <Input
                           id="combo-price"
-                          type="number"
-                          {...registerCombo("price", { 
-                            required: "Giá là bắt buộc",
-                            valueAsNumber: true,
-                            min: { value: 1 }
-                          })}
                           placeholder="0"
+                          value={watchCombo("price") ? new Intl.NumberFormat("vi-VN").format(watchCombo("price") || 0) : ''}
+                          onChange={(e) => {
+                            const numbers = e.target.value.replace(/\D/g, '')
+                            const parsed = parseInt(numbers) || 0
+                            setValueCombo("price", parsed, { shouldValidate: true })
+                          }}
+                          onBlur={(e) => {
+                            const numbers = e.target.value.replace(/\D/g, '')
+                            const parsed = parseInt(numbers) || 0
+                            if (parsed > 0) {
+                              setValueCombo("price", parsed, { shouldValidate: true })
+                            }
+                          }}
                         />
+                        {comboErrors.price && (
+                          <p className="text-sm text-red-500 mt-1">{comboErrors.price.message}</p>
+                        )}
                       </div>
                       <div>
                         <Label htmlFor="combo-quantity">Số lượng</Label>
@@ -394,18 +380,20 @@ export default function ProductDetailPage() {
               </CardHeader>
               <CardContent>
                 {activeCombos.length > 0 ? (
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid grid-cols-12 gap-3">
                     {activeCombos.map((combo) => (
                       <div
                         key={combo?.id}
-                        className="p-4 border rounded-lg hover:shadow-md transition-all bg-white"
+                        className="col-span-1 p-3 border rounded-lg hover:shadow-md transition-all bg-white flex flex-col"
                       >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-base mb-2 text-gray-900">{combo?.name}</h3>
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-xs mb-1 text-gray-900 truncate" title={combo?.name}>
+                              {combo?.name}
+                            </h3>
                             {combo?.isPromotionActive && (
-                              <Badge variant="destructive" className="text-xs mb-2">
-                                🔥 Khuyến mại
+                              <Badge variant="destructive" className="text-[10px] px-1 py-0">
+                                🔥
                               </Badge>
                             )}
                           </div>
@@ -413,31 +401,31 @@ export default function ProductDetailPage() {
                             variant="ghost"
                             size="icon"
                             onClick={() => handleDeleteCombo(combo?.id)}
-                            className="h-8 w-8 text-gray-400 hover:text-red-500"
+                            className="h-6 w-6 text-gray-400 hover:text-red-500 flex-shrink-0"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
+                        <div className="space-y-1 mt-auto">
+                          <div className="flex flex-col gap-1">
                             {combo?.promotionalPrice && combo?.isPromotionActive ? (
                               <>
-                                <span className="text-sm line-through text-gray-400">
+                                <span className="text-[10px] line-through text-gray-400">
                                   {formatPrice(combo.price)}
                                 </span>
-                                <span className="text-xl font-bold text-gray-900">
+                                <span className="text-sm font-bold text-gray-900">
                                   {formatPrice(combo.promotionalPrice)}
                                 </span>
                               </>
                             ) : (
-                              <span className="text-xl font-semibold text-gray-900">
+                              <span className="text-sm font-semibold text-gray-900">
                                 {formatPrice(combo?.price || 0)}
                               </span>
                             )}
                           </div>
                           {combo?.quantity !== undefined && (
-                            <p className="text-xs text-gray-500">
-                              Số lượng: {combo.quantity} sản phẩm
+                            <p className="text-[10px] text-gray-500">
+                              {combo.quantity} sp
                             </p>
                           )}
                         </div>
@@ -471,10 +459,16 @@ export default function ProductDetailPage() {
               <DialogTitle>Cập nhật sản phẩm</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmitEdit((data) => {
-              updateMutation.mutate(data)
+              if (!data?.categoryId) {
+                toast.error("Vui lòng chọn danh mục")
+                return
+              }
+              // Remove quantity from product data (only combos have quantity)
+              const { quantity, ...productData } = data
+              updateMutation.mutate(productData)
             })} className="space-y-4">
               <div>
-                <Label htmlFor="edit-name">Tên sản phẩm *</Label>
+                <Label htmlFor="edit-name">Tên sản phẩm <span className="text-red-500">*</span></Label>
                 <Input
                   id="edit-name"
                   {...registerEdit("name", { required: "Tên sản phẩm là bắt buộc" })}
@@ -489,16 +483,15 @@ export default function ProductDetailPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="edit-categoryId">Danh mục</Label>
+                <Label htmlFor="edit-categoryId">Danh mục <span className="text-red-500">*</span></Label>
                 <Select
-                  value={watchEdit("categoryId") || "none"}
-                  onValueChange={(value) => setValueEdit("categoryId", value === "none" ? undefined : value)}
+                  value={watchEdit("categoryId") || ""}
+                  onValueChange={(value) => setValueEdit("categoryId", value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Chọn danh mục" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Không có danh mục</SelectItem>
                     {categories?.map?.((category) => (
                       <SelectItem key={category?.id} value={category?.id}>
                         {category?.name}
@@ -506,14 +499,9 @@ export default function ProductDetailPage() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div>
-                <Label htmlFor="edit-quantity">Số lượng</Label>
-                <Input
-                  id="edit-quantity"
-                  type="number"
-                  {...registerEdit("quantity", { valueAsNumber: true, min: 0 })}
-                />
+                {editErrors.categoryId && (
+                  <p className="text-sm text-red-500 mt-1">{editErrors.categoryId.message}</p>
+                )}
               </div>
               <div className="flex items-center space-x-2">
                 <Switch

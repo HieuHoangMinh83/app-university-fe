@@ -90,7 +90,7 @@ export default function UsersPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
-                  <Label htmlFor="name">Tên nhân viên *</Label>
+                  <Label htmlFor="name">Tên nhân viên <span className="text-red-500">*</span></Label>
                   <Input
                     id="name"
                     {...register("name", { required: "Tên nhân viên là bắt buộc" })}
@@ -101,7 +101,7 @@ export default function UsersPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="phone">Số điện thoại *</Label>
+                  <Label htmlFor="phone">Số điện thoại <span className="text-red-500">*</span></Label>
                   <Input
                     id="phone"
                     {...register("phone", { 
@@ -119,7 +119,7 @@ export default function UsersPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="password">Mật khẩu *</Label>
+                  <Label htmlFor="password">Mật khẩu <span className="text-red-500">*</span></Label>
                   <Input
                     id="password"
                     type="password"
@@ -137,7 +137,7 @@ export default function UsersPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="role">Vai trò *</Label>
+                  <Label htmlFor="role">Vai trò <span className="text-red-500">*</span></Label>
                   <Select
                     {...register("role", { required: "Vai trò là bắt buộc" })}
                   >
