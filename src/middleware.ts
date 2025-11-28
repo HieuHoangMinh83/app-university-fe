@@ -1,18 +1,11 @@
 import { withAuth } from "next-auth/middleware";
-import createIntlMiddleware from "next-intl/middleware";
-import { NextRequest } from "next/server";
-
-// Cấu hình locale cho next-intl
-const locales = ["vi"];
-
-const intlMiddleware = createIntlMiddleware({
-  locales,
-  defaultLocale: "vi",
-});
+import { NextRequest, NextResponse } from "next/server";
 
 // Bọc toàn bộ route với middleware đăng nhập, trừ /auth/*
 const authMiddleware = withAuth(
-  (req) => intlMiddleware(req), // tích hợp với next-intl
+  (req) => {
+    return NextResponse.next();
+  },
   {
     callbacks: {
       authorized: ({ token }) => !!token,
@@ -28,10 +21,14 @@ export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // ❌ Bỏ qua auth middleware với bất kỳ route /auth/*
-  if (pathname.startsWith("/auth") || pathname.startsWith("/vi/auth")) {
-    return intlMiddleware(req); // chỉ xử lý locale
+  if (pathname.startsWith("/auth")) {
+    return NextResponse.next();
   }
 
-  // ✅ Các route còn lại đều qua authMiddleware + intl
+  // ✅ Các route còn lại đều qua authMiddleware
   return (authMiddleware as any)(req);
 }
+
+export const config = {
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};

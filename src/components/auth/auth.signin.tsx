@@ -10,8 +10,6 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import SwitchTheme from "../switchbtn/switch.btn";
 import { useThemeContext } from "@/lib/providers/ThemeProvider";
-import LocalSwitcher from "../SwitchLangue/switcherLangue";
-import { useTranslations } from "next-intl";
 function Login() {
   const [phone, setphone] = useState("");
   const [password, setPassword] = useState("");
@@ -21,7 +19,6 @@ function Login() {
   const toast = useRef(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const t = useTranslations("LoginPage");
 
   const showError = (Message: string) => {
     //@ts-ignore
@@ -35,14 +32,23 @@ function Login() {
 
   const handleSubmit = async () => {
     if (!phone || !password) {
-      showError("Please complete your phone and password");
+      showError("Vui lòng nhập đầy đủ số điện thoại và mật khẩu");
+      return;
+    }
+
+    // Validate phone format: 10 số, bắt đầu bằng 03, 05, 07, 08, 09
+    const phoneRegex = /^(03|05|07|08|09)[0-9]{8}$/;
+    const cleanPhone = phone.trim().replace(/\s+/g, '');
+    
+    if (!phoneRegex.test(cleanPhone)) {
+      showError("Số điện thoại không hợp lệ. Vui lòng nhập 10 số bắt đầu bằng 03, 05, 07, 08 hoặc 09");
       return;
     }
 
     setLoading(true);
 
     const res = await signIn("credentials", {
-      phone: phone,
+      phone: cleanPhone,
       password: password,
       redirect: false,
     });
@@ -56,11 +62,20 @@ function Login() {
     } else {
       if (res?.error) {
         // Loại bỏ prefix "Error: " nếu có
-        const errorMessage = res.error.replace(/^Error:\s*/, "");
+        let errorMessage = res.error.replace(/^Error:\s*/, "");
+        
+        // Dịch một số message phổ biến
+        if (errorMessage.includes("User not found")) {
+          errorMessage = "Người dùng không tồn tại. Vui lòng kiểm tra lại số điện thoại";
+        } else if (errorMessage.includes("Invalid credentials")) {
+          errorMessage = "Số điện thoại hoặc mật khẩu không đúng";
+        } else if (errorMessage.includes("User is not active")) {
+          errorMessage = "Tài khoản chưa được kích hoạt. Vui lòng liên hệ quản trị viên";
+        }
+        
         showError(errorMessage);
         return;
       }
-
     }
   };
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -90,14 +105,7 @@ function Login() {
             Wellcome!
           </h2>
           <p className="text-white text-xl sm:text-lg  w-[380px] sm:dark:text-white sm:text-black sm:w-[300px] ml-4 sm:ml-3 mt-3 h-[40px] block sm:mt-5 lg:mt-0 xl:mt-2 lg:ml-0">
-            {t("title1")}
-            <Link
-              href="/auth/register"
-              className="font-bold text-blue-600 sm:text-blue-500 pl-1 pr-1"
-            >
-              {t("title2")}
-            </Link>
-            {t("title3")}
+            Đăng nhập để tiếp tục
           </p>
         </div>
       </div>
@@ -165,7 +173,7 @@ function Login() {
         </div>
 
         <h2 className=" w-[85%]  sm:w-full text-xl sm:text-lg text-end sm:dark:text-white text-black sm:text-gray-500  ml-4 mt-[10px] xl:mt-3 hover:text-blue-500 hover:cursor-pointer ">
-          {t("forget")}
+          Quên mật khẩu?
         </h2>
       </div>
     );
@@ -246,9 +254,6 @@ function Login() {
           </div>
           <div className="absolute top-[15px] right-4">
             <SwitchTheme />
-          </div>
-          <div className="absolute top-[55px] right-4">
-            <LocalSwitcher />
           </div>
         </div>
       </div>

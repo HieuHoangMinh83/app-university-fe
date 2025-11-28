@@ -19,7 +19,6 @@ export interface IStaff {
 declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     access_token: string;
-    refresh_token: string;
     staffInfo: IStaff;
   }
 }
@@ -27,7 +26,6 @@ declare module "next-auth/jwt" {
 declare module "next-auth" {
   interface Session {
     access_token: string;
-    refresh_token: string;
     staffInfo: IStaff;
   }
 }

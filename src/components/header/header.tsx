@@ -9,9 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import axios, { AxiosResponse } from "axios";
 import SwitchTheme from "@/components/switchbtn/switch.btn";
 import { useThemeContext } from "@/lib/providers/ThemeProvider";
-import LocalSwitcher from "../SwitchLangue/switcherLangue";
 import { usePathname, useRouter } from "next/navigation";
-import { useLocale } from "next-intl";
 async function fetchData(url: string, body: any) {
   // You can await here
   try {
@@ -29,12 +27,20 @@ async function fetchData(url: string, body: any) {
 type Callback = () => void;
 function NavigateHome() {
   const { data: session, status, update } = useSession();
-  //@ts-ignore
-  const localActive = useLocale();
   let current = usePathname();
   const handleLogout = async () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, '') || '';
+    let baseUrl = apiUrl;
+    if (!baseUrl.includes('/api/v1')) {
+      if (baseUrl.endsWith('/api')) {
+        baseUrl = `${baseUrl}/v1`;
+      } else {
+        baseUrl = `${baseUrl}/api/v1`;
+      }
+    }
+    
     const response = await fetchData(
-      `${process.env.NEXT_PUBLIC_API_URL}/auth/logout`,
+      `${baseUrl}/auth/logout`,
       {
         headers: {
           Authorization: `Bearer ${session?.access_token}`,
@@ -84,10 +90,10 @@ function NavigateHome() {
                 </button>
               ) : (
                 <Link
-                  href={`/${localActive}/auth/login`}
+                  href="/auth/login"
                   className="block w-full bg-[#cccccc65] hover:bg-[#cccccc48] dark:hover:bg-[#35323243] text-center py-1"
                 >
-                  Sign up
+                  Đăng nhập
                 </Link>
               )}
             </li>
@@ -103,15 +109,9 @@ function NavigateHome() {
         <div className="flex text-xl mr-8 items-center relative w-full sm:ml-auto md:text-2xl md:justify-end lg:text-3xl  ">
           <Link
             className="text-black font-medium sm:ml-3 md:ml-8  ml-2 dark:text-gray-200"
-            href={`/${localActive}`}
+            href="/"
           >
-            Home
-          </Link>
-          <Link
-            className="text-black dark:text-gray-200 font-medium sm:ml-3 md:ml-8  ml-2"
-            href={`/${localActive}/menu`}
-          >
-            Menu
+            Trang chủ
           </Link>
           <Setting />
         </div>
