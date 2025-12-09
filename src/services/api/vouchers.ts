@@ -1,4 +1,5 @@
 import apiClient from "@/lib/api-client";
+import { PaginationParams, PaginatedResponse } from "./types";
 
 export type VoucherType = "PERCENT" | "FIXED";
 
@@ -70,10 +71,24 @@ export interface UpdateVoucherDto {
   useEnd?: string;
 }
 
+export interface GetVouchersParams extends PaginationParams {
+  isActive?: boolean;
+  isRedeemable?: boolean;
+}
+
 export const vouchersApi = {
   // Lấy tất cả vouchers
-  getAll: async (): Promise<Voucher[]> => {
-    const response = await apiClient.get("/vouchers");
+  getAll: async (params?: GetVouchersParams): Promise<Voucher[] | PaginatedResponse<Voucher>> => {
+    const response = await apiClient.get("/vouchers", { params });
+    // Check if response has pagination structure: { data: { data: [...], meta: {...} } }
+    if (response?.data?.data?.data && response?.data?.data?.meta) {
+      return response.data.data as PaginatedResponse<Voucher>;
+    }
+    // Check if response is direct paginated: { data: [...], meta: {...} }
+    if (response?.data?.data && response?.data?.meta && Array.isArray(response.data.data)) {
+      return response.data as PaginatedResponse<Voucher>;
+    }
+    // Fallback to non-paginated response
     const data = response.data?.data || response.data;
     return Array.isArray(data) ? data : [];
   },

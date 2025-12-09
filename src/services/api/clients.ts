@@ -1,5 +1,6 @@
 import apiClient from "@/lib/api-client";
 import { Order } from "./orders";
+import { PaginationParams, PaginatedResponse } from "./types";
 
 export interface Client {
   id: string;
@@ -43,15 +44,26 @@ export const clientsApi = {
   },
 
   // Lấy tất cả clients
-  getAll: async (): Promise<Client[]> => {
+  getAll: async (params?: PaginationParams): Promise<Client[] | PaginatedResponse<Client>> => {
     try {
-      const response = await apiClient.get("/clients");
-      return response?.data?.data || response?.data;
+      const response = await apiClient.get("/clients", { params });
+      // Check if response has pagination structure: { data: { data: [...], meta: {...} } }
+      if (response?.data?.data?.data && response?.data?.data?.meta) {
+        return response.data.data as PaginatedResponse<Client>;
+      }
+      // Check if response is direct paginated: { data: [...], meta: {...} }
+      if (response?.data?.data && response?.data?.meta && Array.isArray(response.data.data)) {
+        return response.data as PaginatedResponse<Client>;
+      }
+      // Fallback to non-paginated response
+      const data = response?.data?.data || response?.data;
+      return Array.isArray(data) ? data : [];
     } catch (error: any) {
       // Nếu API không tồn tại, thử lấy từ orders
       if (error?.response?.status === 404) {
-      const ordersResponse = await apiClient.get("/orders");
-      const orders = ordersResponse?.data?.data || ordersResponse?.data || [];
+      const ordersResponse = await apiClient.get("/orders", { params });
+      const ordersData = ordersResponse?.data?.data?.data || ordersResponse?.data?.data || ordersResponse?.data || [];
+      const orders = Array.isArray(ordersData) ? ordersData : (Array.isArray(ordersData?.data) ? ordersData.data : []);
       // Extract unique clients from orders
       const clientsMap = new Map<string, Client>();
       orders?.forEach?.((order: any) => {

@@ -1,4 +1,5 @@
 import apiClient from "@/lib/api-client";
+import { PaginationParams, PaginatedResponse } from "./types";
 
 export interface ComboGift {
   id: string;
@@ -75,6 +76,11 @@ export interface CreateProductDto {
     promotionStart?: string;
     promotionEnd?: string;
     isPromotionActive?: boolean;
+    items?: Array<{
+      inventoryProductId: string;
+      quantity: number;
+      isGift?: boolean;
+    }>;
     giftCombos?: Array<{
       giftComboId: string; // có thể là UUID, index "0", "1", hoặc name "Combo 2"
       quantity?: number;
@@ -101,6 +107,11 @@ export interface CreateComboDto {
   promotionStart?: string;
   promotionEnd?: string;
   isPromotionActive?: boolean;
+  items?: Array<{
+    inventoryProductId: string;
+    quantity: number;
+    isGift?: boolean;
+  }>;
 }
 
 export interface UpdateComboDto {
@@ -115,10 +126,24 @@ export interface UpdateComboDto {
   isPromotionActive?: boolean;
 }
 
+export interface GetProductsParams extends PaginationParams {
+  categoryId?: string;
+  status?: string;
+}
+
 export const productsApi = {
   // Lấy tất cả products
-  getAll: async (): Promise<Product[]> => {
-    const response = await apiClient.get("/products");
+  getAll: async (params?: GetProductsParams): Promise<Product[] | PaginatedResponse<Product>> => {
+    const response = await apiClient.get("/products", { params });
+    // Check if response has pagination structure: { data: { data: [...], meta: {...} } }
+    if (response?.data?.data?.data && response?.data?.data?.meta) {
+      return response.data.data as PaginatedResponse<Product>;
+    }
+    // Check if response is direct paginated: { data: [...], meta: {...} }
+    if (response?.data?.data && response?.data?.meta && Array.isArray(response.data.data)) {
+      return response.data as PaginatedResponse<Product>;
+    }
+    // Fallback to non-paginated response
     const data = response.data?.data || response.data;
     return Array.isArray(data) ? data : [];
   },

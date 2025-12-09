@@ -1,4 +1,5 @@
 import apiClient from "@/lib/api-client";
+import { PaginationParams, PaginatedResponse } from "./types";
 
 export interface User {
   id: string;
@@ -28,9 +29,18 @@ export interface UpdateUserInfoDto {
 
 export const usersApi = {
   // Lấy tất cả users (Admin only)
-  getAll: async (): Promise<User[]> => {
+  getAll: async (params?: PaginationParams): Promise<User[] | PaginatedResponse<User>> => {
     try {
-      const response = await apiClient.get("/users");
+      const response = await apiClient.get("/users", { params });
+      // Check if response has pagination structure: { data: { data: [...], meta: {...} } }
+      if (response?.data?.data?.data && response?.data?.data?.meta) {
+        return response.data.data as PaginatedResponse<User>;
+      }
+      // Check if response is direct paginated: { data: [...], meta: {...} }
+      if (response?.data?.data && response?.data?.meta && Array.isArray(response.data.data)) {
+        return response.data as PaginatedResponse<User>;
+      }
+      // Fallback to non-paginated response
       const data = response?.data?.data || response?.data;
       return Array.isArray(data) ? data : [];
     } catch (error: any) {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { categoriesApi, Category, CreateCategoryDto } from "@/services/api/categories"
 import { Button } from "@/components/ui/button"
@@ -20,16 +20,27 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const queryClient = useQueryClient()
 
-  const { data: categories, isLoading } = useQuery({
+  const { data: categoriesResponse, isLoading } = useQuery({
     queryKey: ["categories"],
-    queryFn: categoriesApi.getAll,
+    queryFn: () => categoriesApi.getAll(),
   })
+
+  // Extract categories array from paginated or non-paginated response
+  const categories = useMemo(() => {
+    if (!categoriesResponse) return undefined
+    if (Array.isArray(categoriesResponse)) return categoriesResponse
+    if ('data' in categoriesResponse && Array.isArray(categoriesResponse.data)) {
+      return categoriesResponse.data
+    }
+    return []
+  }, [categoriesResponse])
 
   const createMutation = useMutation({
     mutationFn: categoriesApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] })
       setIsCreateOpen(false)
+      reset()
       toast.success("Tạo danh mục thành công")
     },
     onError: (error: any) => {
@@ -69,7 +80,6 @@ export default function CategoriesPage() {
     } else {
       createMutation.mutate(data)
     }
-    reset()
   }
 
   const handleEdit = (category: Category) => {
@@ -107,6 +117,7 @@ export default function CategoriesPage() {
                   <Label htmlFor="name">Tên danh mục <span className="text-red-500">*</span></Label>
                   <Input
                     id="name"
+                    className="mt-2"
                     {...register("name", { required: "Tên danh mục là bắt buộc" })}
                   />
                   {errors.name && (
@@ -117,6 +128,7 @@ export default function CategoriesPage() {
                   <Label htmlFor="description">Mô tả</Label>
                   <Textarea
                     id="description"
+                    className="mt-2"
                     {...register("description")}
                     rows={3}
                   />
@@ -151,7 +163,7 @@ export default function CategoriesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {categories?.length > 0 ? (
+                  {categories && categories.length > 0 ? (
                     categories?.map((category) => (
                     <TableRow key={category?.id}>
                       <TableCell className="font-medium">{category?.name}</TableCell>
@@ -205,6 +217,7 @@ export default function CategoriesPage() {
                   <Label htmlFor="edit-name">Tên danh mục <span className="text-red-500">*</span></Label>
                   <Input
                     id="edit-name"
+                    className="mt-2"
                     {...register("name", { required: "Tên danh mục là bắt buộc" })}
                   />
                   {errors.name && (
@@ -215,6 +228,7 @@ export default function CategoriesPage() {
                   <Label htmlFor="edit-description">Mô tả</Label>
                   <Textarea
                     id="edit-description"
+                    className="mt-2"
                     {...register("description")}
                     rows={3}
                   />

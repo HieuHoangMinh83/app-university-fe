@@ -1,4 +1,5 @@
 import apiClient from "@/lib/api-client";
+import { PaginationParams, PaginatedResponse } from "./types";
 
 export type OrderStatus = "PENDING" | "PAID" | "CANCELLED";
 
@@ -62,11 +63,24 @@ export interface UpdateOrderStatusDto {
   status: OrderStatus;
 }
 
+export interface GetOrdersParams extends PaginationParams {
+  clientId?: string;
+  status?: OrderStatus;
+}
+
 export const ordersApi = {
   // Lấy tất cả orders (Admin only)
-  getAll: async (clientId?: string): Promise<Order[]> => {
-    const params = clientId ? { clientId } : {};
+  getAll: async (params?: GetOrdersParams): Promise<Order[] | PaginatedResponse<Order>> => {
     const response = await apiClient.get("/orders", { params });
+    // Check if response has pagination structure: { data: { data: [...], meta: {...} } }
+    if (response?.data?.data?.data && response?.data?.data?.meta) {
+      return response.data.data as PaginatedResponse<Order>;
+    }
+    // Check if response is direct paginated: { data: [...], meta: {...} }
+    if (response?.data?.data && response?.data?.meta && Array.isArray(response.data.data)) {
+      return response.data as PaginatedResponse<Order>;
+    }
+    // Fallback to non-paginated response
     const data = response.data?.data || response.data;
     return Array.isArray(data) ? data : [];
   },

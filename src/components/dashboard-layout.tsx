@@ -22,6 +22,8 @@ import {
     Shield,
     FolderTree,
     UserCircle,
+    History,
+    Plus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -81,26 +83,39 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             ]
         },
         {
-            section: "VERSION 4",
+            section: "QUẢN LÝ",
             items: [
                 { icon: ShoppingBag, label: "Quản lý Orders", href: "/orders" },
                 { icon: UserCircle, label: "Khách hàng", href: "/customers" },
             ]
         },
         {
-            section: "DỊCH VỤ & SẢN PHẨM",
+            section: "SẢN PHẨM",
             items: [
-                { icon: Package, label: "Danh sách dịch vụ", href: "/products" },
-                { icon: FolderTree, label: "Danh sách danh mục", href: "/categories" },
+                { icon: Package, label: "Sản phẩm", href: "/products" },
+                { icon: FolderTree, label: "Danh mục", href: "/categories" },
             ]
         },
         {
-            section: "NỘI BỘ",
+            section: "KHO BÃI",
+            items: [
+                    { icon: Warehouse, label: "Kho hàng", href: "/inventory" },
+                { icon: Package, label: "Sản phẩm kho", href: "/inventory-products" },
+                { icon: Plus, label: "Nhập kho", href: "/inventory-import" },
+                { icon: History, label: "Lịch sử  kho bãi", href: "/inventory-transactions" },
+            ]
+        },
+        {
+            section: "NHÂN VIÊN & PHÂN QUYỀN",
             items: [
                 { icon: Users, label: "Nhân viên", href: "/staff" },
-                { icon: Warehouse, label: "Kho hàng", href: "/inventory" },
-                { icon: Ticket, label: "Vouchers", href: "/vouchers" },
                 { icon: Shield, label: "Roles", href: "/roles" },
+            ]
+        },
+        {
+            section: "HỆ THỐNG",
+            items: [
+                { icon: Ticket, label: "Vouchers", href: "/vouchers" },
             ]
         },
     ]

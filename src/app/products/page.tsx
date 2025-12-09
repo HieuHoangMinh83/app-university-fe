@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
-import React from "react"
+import { useState, useRef, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { productsApi, Product, CreateProductDto } from "@/services/api/products"
 import { categoriesApi } from "@/services/api/categories"
@@ -45,6 +44,7 @@ export default function ProductsPage() {
 
   const [createProductImageUrl, setCreateProductImageUrl] = useState<string | null>(null)
   const [createComboImageUrls, setCreateComboImageUrls] = useState<Record<number, string | null>>({})
+  const comboFileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
   const { register: registerCreate, handleSubmit: handleSubmitCreate, control: controlCreate, watch: watchCreate, setValue: setValueCreate, reset: resetCreateForm, formState: { errors: createErrors } } = useForm<CreateProductDto>({
     defaultValues: {
@@ -152,30 +152,34 @@ export default function ProductsPage() {
   }
 
   // Filter products based on search query, category, and status
-  const filteredProducts = products?.filter((product) => {
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      const matchesSearch =
-        product?.name?.toLowerCase()?.includes(query) ||
-        product?.description?.toLowerCase()?.includes(query) ||
-        product?.category?.name?.toLowerCase()?.includes(query)
-      if (!matchesSearch) return false
-    }
+  const filteredProducts = useMemo(() => {
+    if (!Array.isArray(products)) return []
+    
+    return products.filter((product) => {
+      // Search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        const matchesSearch =
+          product?.name?.toLowerCase()?.includes(query) ||
+          product?.description?.toLowerCase()?.includes(query) ||
+          product?.category?.name?.toLowerCase()?.includes(query)
+        if (!matchesSearch) return false
+      }
 
-    // Category filter
-    if (categoryFilter !== "all") {
-      if (product?.categoryId !== categoryFilter) return false
-    }
+      // Category filter
+      if (categoryFilter !== "all") {
+        if (product?.categoryId !== categoryFilter) return false
+      }
 
-    // Status filter
-    if (statusFilter !== "all") {
-      if (statusFilter === "active" && !product?.isActive) return false
-      if (statusFilter === "inactive" && product?.isActive) return false
-    }
+      // Status filter
+      if (statusFilter !== "all") {
+        if (statusFilter === "active" && !product?.isActive) return false
+        if (statusFilter === "inactive" && product?.isActive) return false
+      }
 
-    return true
-  })
+      return true
+    })
+  }, [products, searchQuery, categoryFilter, statusFilter])
 
   return (
     <DashboardLayout>
@@ -400,13 +404,13 @@ export default function ProductsPage() {
                             )}
                           </div>
                         </div>
-                        <div className="col-span-12 grid grid-cols-12 gap-4 border-t pt-4">
+                        <div className="grid grid-cols-12 gap-4 border-t pt-4">
                           <div className="col-span-12 md:col-span-3">
                             <Label className="text-sm font-medium">Giá khuyến mại (VND)</Label>
                             <Input
                               className="mt-1.5"
                               placeholder="0"
-                              value={watchCreate(`combos.${index}.promotionalPrice`) ? formatNumberInput(watchCreate(`combos.${index}.promotionalPrice`).toString()) : ''}
+                              value={watchCreate(`combos.${index}.promotionalPrice`) ? formatNumberInput(String(watchCreate(`combos.${index}.promotionalPrice`))) : ''}
                               onChange={(e) => {
                                 const formatted = formatNumberInput(e.target.value)
                                 const parsed = parseFormattedNumber(formatted)
@@ -448,7 +452,8 @@ export default function ProductsPage() {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
                     {comboFields.length === 0 && (
                       <div className="text-center py-8 text-gray-500 border border-dashed rounded-lg">
                         <Package className="h-12 w-12 mx-auto mb-3 text-gray-300" />

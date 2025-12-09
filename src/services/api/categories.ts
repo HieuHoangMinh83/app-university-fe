@@ -1,4 +1,5 @@
 import apiClient from "@/lib/api-client";
+import { PaginationParams, PaginatedResponse } from "./types";
 
 export interface Category {
   id: string;
@@ -31,10 +32,21 @@ export interface UpdateCategoryDto {
   description?: string;
 }
 
+export interface GetCategoriesParams extends PaginationParams {}
+
 export const categoriesApi = {
   // Lấy tất cả categories
-  getAll: async (): Promise<Category[]> => {
-    const response = await apiClient.get("/categories");
+  getAll: async (params?: GetCategoriesParams): Promise<Category[] | PaginatedResponse<Category>> => {
+    const response = await apiClient.get("/categories", { params });
+    // Check if response has pagination structure: { data: { data: [...], meta: {...} } }
+    if (response?.data?.data?.data && response?.data?.data?.meta) {
+      return response.data.data as PaginatedResponse<Category>;
+    }
+    // Check if response is direct paginated: { data: [...], meta: {...} }
+    if (response?.data?.data && response?.data?.meta && Array.isArray(response.data.data)) {
+      return response.data as PaginatedResponse<Category>;
+    }
+    // Fallback to non-paginated response
     const data = response.data?.data || response.data;
     return Array.isArray(data) ? data : [];
   },
