@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { inventoryApi, InventoryItem, ImportInventoryDto, ImportInventoryItemDto } from "@/services/api/inventory"
 import { inventoryProductsApi } from "@/services/api/inventory-products"
@@ -11,14 +11,16 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Loader2, ArrowLeft, Package, Trash2, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, Loader2, ArrowLeft, Package, Trash2, ChevronLeft, ChevronRight, ChevronsUpDown, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
 import DashboardLayout from "@/components/dashboard-layout"
 import Link from "next/link"
+import { cn } from "@/lib/utils"
 
 interface ImportItem {
+  id: string // Unique ID để tracking item
   productId: string
   quantity: number
   expiryDate: string
@@ -75,9 +77,14 @@ export default function InventoryImportPage() {
   const [importItems, setImportItems] = useState<ImportItem[]>([])
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
   const [sessionDescription, setSessionDescription] = useState("")
+  const [productSearchValues, setProductSearchValues] = useState<Record<string, string>>({})
+  const [productPopoverOpen, setProductPopoverOpen] = useState<Record<string, boolean>>({})
+  const [quantityInputValues, setQuantityInputValues] = useState<Record<string, string>>({})
 
   const addImportItem = () => {
+    const newId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     setImportItems([{
+      id: newId,
       productId: "",
       quantity: 1,
       expiryDate: "",
@@ -85,15 +92,110 @@ export default function InventoryImportPage() {
     }, ...importItems])
   }
 
-  const removeImportItem = (index: number) => {
-    setImportItems(importItems.filter((_, i) => i !== index))
+  const removeImportItem = (id: string) => {
+    setImportItems(importItems.filter(item => item.id !== id))
+    // Xóa search values và popover state cho item bị xóa
+    setProductSearchValues(prev => {
+      const newValues = { ...prev }
+      delete newValues[id]
+      return newValues
+    })
+    setProductPopoverOpen(prev => {
+      const newOpen = { ...prev }
+      delete newOpen[id]
+      return newOpen
+    })
+    setQuantityInputValues(prev => {
+      const newValues = { ...prev }
+      delete newValues[id]
+      return newValues
+    })
   }
 
-  const updateImportItem = (index: number, field: keyof ImportItem, value: any) => {
+  const updateImportItem = (id: string, field: keyof ImportItem, value: any) => {
+    const itemIndex = importItems.findIndex(item => item.id === id)
+    if (itemIndex === -1) return
+    
+    console.log(`[Update Item] ID: ${id}, Index: ${itemIndex}, Field: ${field}, Value:`, {
+      value,
+      valueType: typeof value,
+      beforeUpdate: importItems[itemIndex],
+      fieldValue: importItems[itemIndex]?.[field]
+    })
     const updated = [...importItems]
-    updated[index] = { ...updated[index], [field]: value }
+    updated[itemIndex] = { ...updated[itemIndex], [field]: value }
+    console.log(`[After Update] ID: ${id}, Index: ${itemIndex}:`, {
+      updatedItem: updated[itemIndex],
+      allItems: updated
+    })
     setImportItems(updated)
   }
+
+  // Đóng dropdown khi click ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      const dropdownContainer = target.closest('[data-dropdown-item]')
+      if (!dropdownContainer) {
+        setProductPopoverOpen({})
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  // Sync productSearchValues với item.productId khi item thay đổi
+  // CHỈ sync khi productId có giá trị và searchValue chưa được set
+  useEffect(() => {
+    importItems.forEach((item) => {
+      if (item.productId) {
+        const product = Array.isArray(inventoryProducts) 
+          ? inventoryProducts.find(p => String(p.id) === String(item.productId))
+          : undefined
+        if (product?.name) {
+          setProductSearchValues(prev => {
+            // Chỉ update nếu:
+            // 1. Chưa có giá trị cho item này, HOẶC
+            // 2. Giá trị hiện tại khác với tên sản phẩm (để sync lại nếu cần)
+            // KHÔNG update nếu user đang search (có giá trị khác với tên sản phẩm)
+            const currentValue = prev[item.id]
+            const shouldUpdate = !currentValue || currentValue === product.name
+            if (shouldUpdate) {
+              console.log(`[Sync SearchValue] Item ID: ${item.id}:`, {
+                currentValue,
+                productName: product.name,
+                willUpdate: true
+              })
+              return { ...prev, [item.id]: product.name }
+            }
+            return prev
+          })
+        }
+      } else {
+        // Nếu productId bị clear, chỉ clear searchValue nếu nó đang hiển thị tên sản phẩm đã chọn
+        // (không clear nếu user đang search)
+        setProductSearchValues(prev => {
+          const currentValue = prev[item.id]
+          if (currentValue) {
+            // Kiểm tra xem currentValue có phải là tên của sản phẩm nào không
+            const isProductName = Array.isArray(inventoryProducts) && 
+              inventoryProducts.some(p => p.name === currentValue)
+            if (isProductName) {
+              // Nếu là tên sản phẩm, clear nó
+              const newValues = { ...prev }
+              delete newValues[item.id]
+              return newValues
+            }
+          }
+          return prev
+        })
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importItems.map(item => `${item.id}-${item.productId}`).join(','), inventoryProducts])
 
 
   // Validate và mở modal xác nhận
@@ -108,7 +210,25 @@ export default function InventoryImportPage() {
       const item = importItems[i]
       
       // Validate productId
-      if (!item.productId || item.productId.trim() === "") {
+      const productIdStr = String(item.productId || "").trim()
+      console.log(`[Validation] Item #${i + 1}:`, {
+        productId: item.productId,
+        productIdType: typeof item.productId,
+        productIdStr: productIdStr,
+        productIdStrLength: productIdStr.length,
+        productName: item.productName,
+        fullItem: item,
+        allImportItems: importItems
+      })
+      if (!productIdStr || productIdStr === "") {
+        console.error(`[Validation Error] Item #${i + 1} - productId is empty or invalid:`, {
+          productId: item.productId,
+          productIdType: typeof item.productId,
+          productIdStr: productIdStr,
+          productIdStrLength: productIdStr.length,
+          item: item,
+          allImportItems: importItems
+        })
         toast.error(`Vui lòng chọn sản phẩm cho sản phẩm #${i + 1}`)
         return
       }
@@ -176,6 +296,9 @@ export default function InventoryImportPage() {
       setImportItems([])
       setSessionDescription("")
       setIsConfirmDialogOpen(false)
+      setProductSearchValues({})
+      setProductPopoverOpen({})
+      setQuantityInputValues({})
       toast.success(`Đã nhập ${importItems.length} sản phẩm thành công`)
     } catch (error) {
       // Error đã được xử lý trong mutation onError
@@ -195,18 +318,7 @@ export default function InventoryImportPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/inventory">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold">Nhập kho</h1>
-            </div>
-          </div>
-        </div>
+      
 
         {/* Import Form */}
         <Card>
@@ -273,99 +385,229 @@ export default function InventoryImportPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {importItems.map((item, index) => (
-                    <Card key={index} className="p-4">
-                      <div className="flex items-start justify-between mb-4">
-                        <Badge variant="outline">Sản phẩm #{index + 1}</Badge>
-                        {importItems.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeImportItem(index)}
-                            className="h-8 w-8 text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div>
-                            <Label>Sản phẩm <span className="text-red-500">*</span></Label>
-                            <Select
-                              value={item.productId}
-                              onValueChange={(value) => {
-                                const product = Array.isArray(inventoryProducts) ? inventoryProducts.find(p => p.id === value) : undefined
-                                updateImportItem(index, "productId", value)
-                                updateImportItem(index, "productName", product?.name)
-                                updateImportItem(index, "categoryName", product?.category?.name)
-                              }}
-                            >
-                              <SelectTrigger className="mt-2">
-                                <SelectValue placeholder="Chọn sản phẩm" />
-                              </SelectTrigger>
-                              <SelectContent className="max-h-[300px]">
-                                {isLoadingProducts ? (
-                                  <div className="flex items-center justify-center p-4">
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  </div>
-                                ) : Array.isArray(inventoryProducts) && inventoryProducts.length > 0 ? (
-                                  <>
-                                    {inventoryProducts.map((product) => (
-                                      <SelectItem key={product?.id} value={product?.id}>
-                                        {product?.name}
-                                      </SelectItem>
-                                    ))}
-                                  </>
-                                ) : (
-                                  <div className="p-4 text-sm text-gray-500 text-center">
-                                    Không có sản phẩm nào
-                                  </div>
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div>
-                            <Label>Số lượng <span className="text-red-500">*</span></Label>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">STT</TableHead>
+                        <TableHead>Sản phẩm <span className="text-red-500">*</span></TableHead>
+                        <TableHead className="w-32">Số lượng <span className="text-red-500">*</span></TableHead>
+                        <TableHead className="w-40">Ngày hết hạn <span className="text-red-500">*</span></TableHead>
+                        <TableHead>Ghi chú</TableHead>
+                        <TableHead className="w-20">Hành động</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {importItems.map((item, index) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{index + 1}</TableCell>
+                          <TableCell>
+                            <div className="relative product-search-dropdown" data-dropdown-item={item.id}>
+                              <Input
+                                type="text"
+                                placeholder="Chọn sản phẩm trong kho"
+                                value={
+                                  productSearchValues[item.id] !== undefined
+                                    ? productSearchValues[item.id]
+                                    : item.productId
+                                      ? (Array.isArray(inventoryProducts) ? inventoryProducts.find(p => String(p.id) === String(item.productId))?.name : undefined) || ""
+                                      : ""
+                                }
+                                onChange={(e) => {
+                                  const searchValue = e.target.value
+                                  console.log(`[Input onChange] Item ID: ${item.id}:`, {
+                                    searchValue,
+                                    currentProductId: item.productId,
+                                    currentProductName: item.productName
+                                  })
+                                  
+                                  // Luôn cập nhật search value để hiển thị
+                                  setProductSearchValues(prev => ({ ...prev, [item.id]: searchValue }))
+                                  
+                                  // Mở popover khi có text
+                                  if (searchValue) {
+                                    setProductPopoverOpen(prev => ({ ...prev, [item.id]: true }))
+                                  }
+                                  
+                                  // CHỈ clear productId nếu user xóa hết text VÀ đang trong quá trình search
+                                  // KHÔNG clear nếu đã chọn sản phẩm và user đang edit text
+                                  // Nếu searchValue rỗng và không có productId đã chọn, thì mới clear
+                                  if (!searchValue && !item.productId) {
+                                    updateImportItem(item.id, "productId", "")
+                                    updateImportItem(item.id, "productName", undefined)
+                                    updateImportItem(item.id, "categoryName", undefined)
+                                  }
+                                }}
+                                onFocus={() => {
+                                  setProductPopoverOpen(prev => ({ ...prev, [item.id]: true }))
+                                }}
+                                className="h-9 pr-8"
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setProductPopoverOpen(prev => ({ ...prev, [item.id]: !prev[item.id] }))
+                                }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 flex items-center justify-center hover:bg-gray-100 rounded z-10"
+                              >
+                                <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                              </button>
+                              
+                              {/* Custom Dropdown với absolute positioning */}
+                              {productPopoverOpen[item.id] && (
+                                <div className="absolute z-50 w-full mt-1 rounded-md border bg-white shadow-lg max-h-[300px] overflow-y-auto">
+                                  {isLoadingProducts ? (
+                                    <div className="flex items-center justify-center p-4">
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    </div>
+                                  ) : Array.isArray(inventoryProducts) && inventoryProducts.filter((ip: any) => {
+                                    if (ip?.isActive === false) return false
+                                    const searchValue = productSearchValues[item.id]?.toLowerCase() || ""
+                                    if (!searchValue) return true
+                                    return ip?.name?.toLowerCase().includes(searchValue)
+                                  }).length === 0 ? (
+                                    <div className="p-4 text-center text-sm text-gray-500">
+                                      Không tìm thấy sản phẩm.
+                                    </div>
+                                  ) : (
+                                    <div className="p-1">
+                                      {inventoryProducts?.filter((ip: any) => {
+                                        if (ip?.isActive === false) return false
+                                        const searchValue = productSearchValues[item.id]?.toLowerCase() || ""
+                                        if (!searchValue) return true
+                                        return ip?.name?.toLowerCase().includes(searchValue)
+                                      })?.map((product: any) => (
+                                        <div
+                                          key={product?.id}
+                                          onClick={() => {
+                                            // Đảm bảo productId luôn là string
+                                            const productId = product?.id ? String(product.id) : ""
+                                            console.log(`[Select Product] Item ID: ${item.id}:`, {
+                                              productId: productId,
+                                              productIdType: typeof productId,
+                                              productOriginalId: product?.id,
+                                              productOriginalIdType: typeof product?.id,
+                                              productName: product?.name,
+                                              beforeUpdate: item
+                                            })
+                                            
+                                            // Update tất cả fields cùng lúc để đảm bảo consistency
+                                            const updatedItems = importItems.map(i => 
+                                              i.id === item.id 
+                                                ? {
+                                                    ...i,
+                                                    productId: productId,
+                                                    productName: product?.name,
+                                                    categoryName: product?.category?.name
+                                                  }
+                                                : i
+                                            )
+                                            setImportItems(updatedItems)
+                                            
+                                            // Set search value và đóng popover
+                                            setProductSearchValues(prev => ({ ...prev, [item.id]: product?.name || "" }))
+                                            setProductPopoverOpen(prev => ({ ...prev, [item.id]: false }))
+                                            
+                                            console.log(`[After Select] Item ID: ${item.id}:`, {
+                                              updatedItem: updatedItems.find(i => i.id === item.id),
+                                              allItems: updatedItems
+                                            })
+                                          }}
+                                          className={cn(
+                                            "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-blue-50 hover:text-blue-900",
+                                            String(item.productId) === String(product?.id) && "bg-blue-100 text-blue-900"
+                                          )}
+                                        >
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              String(item.productId) === String(product?.id)
+                                                ? "opacity-100"
+                                                : "opacity-0"
+                                            )}
+                                          />
+                                          {product?.name}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
                             <Input
-                              type="number"
-                              className="mt-2"
-                              placeholder="Nhập số lượng"
-                              min={1}
-                              step={1}
-                              value={item.quantity || ""}
-                              onChange={(e) => updateImportItem(index, "quantity", parseInt(e.target.value) || 1)}
+                              type="text"
+                              placeholder="Số lượng"
+                              value={quantityInputValues[item.id] !== undefined ? quantityInputValues[item.id] : (item.quantity?.toString() || "")}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                // Chỉ cho phép số, cho phép rỗng để user có thể xóa hết
+                                const numbers = value.replace(/\D/g, '')
+                                // Cập nhật giá trị hiển thị
+                                setQuantityInputValues(prev => ({ ...prev, [item.id]: numbers }))
+                              }}
+                              onBlur={(e) => {
+                                const value = e.target.value
+                                const numbers = value.replace(/\D/g, '')
+                                // Kiểm tra lại sau khi user nhập xong
+                                const parsed = parseInt(numbers)
+                                if (!parsed || parsed < 1 || isNaN(parsed)) {
+                                  // Nếu không phải số hợp lệ hoặc <= 0, set về 1
+                                  updateImportItem(item.id, "quantity", 1)
+                                  setQuantityInputValues(prev => {
+                                    const newValues = { ...prev }
+                                    delete newValues[item.id]
+                                    return newValues
+                                  })
+                                } else {
+                                  updateImportItem(item.id, "quantity", parsed)
+                                  setQuantityInputValues(prev => {
+                                    const newValues = { ...prev }
+                                    delete newValues[item.id]
+                                    return newValues
+                                  })
+                                }
+                              }}
+                              className="h-9"
                             />
-                          </div>
-
-                          <div>
-                            <Label>Ngày hết hạn <span className="text-red-500">*</span></Label>
+                          </TableCell>
+                          <TableCell>
                             <Input
                               type="date"
-                              className="mt-2"
                               min={new Date().toISOString().slice(0, 10)}
                               value={item.expiryDate}
-                              onChange={(e) => updateImportItem(index, "expiryDate", e.target.value)}
+                              onChange={(e) => updateImportItem(item.id, "expiryDate", e.target.value)}
+                              className="h-9"
                             />
-                          </div>
-                        </div>
-
-                        <div>
-                          <Label>Ghi chú</Label>
-                          <Textarea
-                            className="mt-2"
-                            placeholder="Ghi chú về sản phẩm này (tùy chọn)"
-                            rows={2}
-                            value={item.notes || ""}
-                            onChange={(e) => updateImportItem(index, "notes", e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="text"
+                              placeholder="Ghi chú (tùy chọn)"
+                              value={item.notes || ""}
+                              onChange={(e) => updateImportItem(item.id, "notes", e.target.value)}
+                              className="h-9"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {importItems.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeImportItem(item.id)}
+                                className="h-8 w-8 text-red-500 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
 
@@ -376,6 +618,9 @@ export default function InventoryImportPage() {
                     variant="outline"
                     onClick={() => {
                       setImportItems([])
+                      setProductSearchValues({})
+                      setProductPopoverOpen({})
+                      setQuantityInputValues({})
                       toast.info("Đã xóa tất cả sản phẩm")
                     }}
                     disabled={importMutation.isPending}
@@ -431,10 +676,10 @@ export default function InventoryImportPage() {
                     <TableBody>
                       {importItems.map((item, index) => {
                         // Ưu tiên dùng thông tin đã lưu, nếu không có thì tìm trong danh sách hiện tại
-                        const productName = item.productName || (Array.isArray(inventoryProducts) ? inventoryProducts.find(p => p.id === item.productId)?.name : undefined) || `ID: ${item.productId}`
-                        const categoryName = item.categoryName || (Array.isArray(inventoryProducts) ? inventoryProducts.find(p => p.id === item.productId)?.category?.name : undefined) || "-"
+                        const productName = item.productName || (Array.isArray(inventoryProducts) ? inventoryProducts.find(p => String(p.id) === String(item.productId))?.name : undefined) || `ID: ${item.productId}`
+                        const categoryName = item.categoryName || (Array.isArray(inventoryProducts) ? inventoryProducts.find(p => String(p.id) === String(item.productId))?.category?.name : undefined) || "-"
                         return (
-                          <TableRow key={index}>
+                          <TableRow key={item.id}>
                             <TableCell>{index + 1}</TableCell>
                             <TableCell className="font-medium">
                               {productName}

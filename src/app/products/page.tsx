@@ -16,7 +16,8 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ImageUpload } from "@/components/ui/image-upload"
-import { useForm, useFieldArray } from "react-hook-form"
+import { useForm } from "react-hook-form"
+import { useRouter } from "next/navigation"
 import { Plus, Pencil, Trash2, Loader2, Package, Search, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import DashboardLayout from "@/components/dashboard-layout"
@@ -24,6 +25,7 @@ import Link from "next/link"
 import { deleteImage, uploadImage } from "@/lib/supabase"
 
 export default function ProductsPage() {
+  const router = useRouter()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -31,53 +33,57 @@ export default function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const queryClient = useQueryClient()
 
-  // Format number with thousand separators for display
-  const formatNumberInput = (value: string) => {
-    const numbers = value.replace(/\D/g, '')
-    return numbers.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
-  }
-
-  // Parse formatted number back to number
-  const parseFormattedNumber = (value: string) => {
-    return parseInt(value.replace(/\./g, '')) || 0
-  }
-
   const [createProductImageUrl, setCreateProductImageUrl] = useState<string | null>(null)
-  const [createComboImageUrls, setCreateComboImageUrls] = useState<Record<number, string | null>>({})
-  const comboFileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
-  const { register: registerCreate, handleSubmit: handleSubmitCreate, control: controlCreate, watch: watchCreate, setValue: setValueCreate, reset: resetCreateForm, formState: { errors: createErrors } } = useForm<CreateProductDto>({
+  interface CreateProductSimpleDto {
+    name: string
+    description?: string
+    categoryId?: string
+    isActive?: boolean
+    spinCount?: number
+    image?: string
+  }
+
+  const { register: registerCreate, handleSubmit: handleSubmitCreate, watch: watchCreate, setValue: setValueCreate, reset: resetCreateForm, formState: { errors: createErrors } } = useForm<CreateProductSimpleDto>({
     defaultValues: {
       isActive: true,
-      combos: [{ name: "", price: 0, quantity: 1, isActive: true }],
     },
     mode: "onChange"
   })
 
-  const { fields: comboFields, append: appendCombo, remove: removeCombo } = useFieldArray({
-    control: controlCreate,
-    name: "combos",
-  })
-
   const createMutation = useMutation({
-    mutationFn: productsApi.create,
-    onSuccess: () => {
+    mutationFn: async (data: CreateProductSimpleDto) => {
+      // Tạo sản phẩm với một combo tạm thời (API yêu cầu ít nhất 1 combo)
+      // Combo này sẽ được xóa và thay thế khi user thêm combo thực sự từ trang detail
+      // Tạm thời tạo combo với 1 item giả để đáp ứng yêu cầu API
+      const productData: CreateProductDto = {
+        ...data,
+        categoryId: data.categoryId || "",
+        combos: [{
+          name: "Combo tạm thời - Vui lòng cập nhật",
+          price: 0,
+          isActive: false,
+          items: [] // API có thể reject nếu items rỗng, nhưng để user thêm combo sau
+        }]
+      }
+      return productsApi.create(productData)
+    },
+    onSuccess: (product) => {
       queryClient.invalidateQueries({ queryKey: ["products"] })
       setIsCreateOpen(false)
       resetCreateForm({
         isActive: true,
-        combos: [{ name: "", price: 0, quantity: 1, isActive: true }],
       })
       // Xóa ảnh đã upload nếu tạo thành công
       if (createProductImageUrl) {
         deleteImage(createProductImageUrl)
       }
-      Object.values(createComboImageUrls).forEach(url => {
-        if (url) deleteImage(url)
-      })
       setCreateProductImageUrl(null)
-      setCreateComboImageUrls({})
-      toast.success("Tạo sản phẩm thành công")
+      toast.success("Tạo sản phẩm thành công. Vui lòng thêm combo.")
+      // Redirect đến trang detail để thêm combo với query param để tự động mở dialog
+      if (product?.id) {
+        router.push(`/products/${product.id}?addCombo=true`)
+      }
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.message || "Tạo sản phẩm thất bại")
@@ -86,42 +92,17 @@ export default function ProductsPage() {
         deleteImage(createProductImageUrl)
         setCreateProductImageUrl(null)
       }
-      Object.values(createComboImageUrls).forEach(url => {
-        if (url) deleteImage(url)
-      })
-      setCreateComboImageUrls({})
     },
   })
 
-  const onSubmitCreate = (data: CreateProductDto) => {
+  const onSubmitCreate = (data: CreateProductSimpleDto) => {
     // Validate category
     if (!data?.categoryId) {
       toast.error("Vui lòng chọn danh mục")
       return
     }
 
-    // Validate combos
-    if (!data?.combos || data?.combos?.length === 0) {
-      toast.error("Vui lòng thêm ít nhất 1 combo")
-      return
-    }
-
-    // Format promotion dates to ISO 8601 format
-    const formattedData = {
-      ...data,
-      combos: data.combos.map(combo => ({
-        ...combo,
-        // Convert datetime-local to ISO 8601 format
-        promotionStart: combo.promotionStart 
-          ? new Date(combo.promotionStart).toISOString() 
-          : undefined,
-        promotionEnd: combo.promotionEnd 
-          ? new Date(combo.promotionEnd).toISOString() 
-          : undefined,
-      }))
-    }
-
-    createMutation.mutate(formattedData)
+    createMutation.mutate(data)
   }
 
   const { data: products, isLoading } = useQuery({
@@ -193,7 +174,7 @@ export default function ProductsPage() {
                 Tạo sản phẩm mới
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-xl font-semibold">Tạo sản phẩm mới</DialogTitle>
               </DialogHeader>
@@ -259,217 +240,20 @@ export default function ProductsPage() {
                       <p className="text-sm text-red-500 mt-1">{createErrors.categoryId.message}</p>
                     )}
                   </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={watchCreate("isActive")}
+                      onCheckedChange={(checked) => setValueCreate("isActive", checked)}
+                    />
+                    <Label>Kích hoạt sản phẩm</Label>
+                  </div>
                 </div>
 
-                <div className="space-y-3 border-t pt-4">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-base font-semibold">Combos</Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => appendCombo({ name: "", price: 0, quantity: 1, isActive: true })}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Thêm combo
-                    </Button>
-                  </div>
-                  <div className="space-y-3">
-                    {comboFields.map((field, index) => {
-                      const comboImageUrl = watchCreate(`combos.${index}.image`) || ""
-                      
-                      return (
-                      <div key={field.id} className="p-4 border rounded-lg bg-gray-50/50 hover:bg-gray-50 transition-colors space-y-4">
-                        <div className="grid grid-cols-12 gap-4 items-start">
-                          <div className="col-span-12 md:col-span-2">
-                            <Label className="text-sm font-medium mb-1.5 block">Ảnh combo</Label>
-                            <div 
-                              className="relative w-16 h-16 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 transition-colors overflow-hidden"
-                              onClick={() => comboFileInputRefs.current[index]?.click()}
-                            >
-                              {comboImageUrl ? (
-                                <img 
-                                  src={comboImageUrl} 
-                                  alt="Combo preview" 
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-gray-50">
-                                  <Package className="h-6 w-6 text-gray-400" />
-                                </div>
-                              )}
-                              <input
-                                ref={(el) => { comboFileInputRefs.current[index] = el }}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={async (e) => {
-                                  const file = e.target.files?.[0]
-                                  if (!file) return
-                                  
-                                  if (!file.type.startsWith('image/')) {
-                                    toast.error("Vui lòng chọn file ảnh")
-                                    return
-                                  }
-                                  
-                                  if (file.size > 5 * 1024 * 1024) {
-                                    toast.error("Kích thước ảnh không được vượt quá 5MB")
-                                    return
-                                  }
-                                  
-                                  try {
-                                    const oldUrl = createComboImageUrls[index]
-                                    const url = await uploadImage(file, "combo-images")
-                                    if (oldUrl && oldUrl !== url) {
-                                      await deleteImage(oldUrl)
-                                    }
-                                    setValueCreate(`combos.${index}.image`, url)
-                                    setCreateComboImageUrls(prev => ({ ...prev, [index]: url }))
-                                    toast.success("Upload ảnh thành công")
-                                  } catch (error: any) {
-                                    toast.error(error?.message || "Upload ảnh thất bại")
-                                  }
-                                }}
-                                disabled={createMutation.isPending}
-                              />
-                            </div>
-                          </div>
-                          <div className="col-span-12 md:col-span-3">
-                            <Label className="text-sm font-medium">
-                              Tên combo <span className="text-red-500">*</span>
-                            </Label>
-                            <Input
-                              className="mt-1.5"
-                              placeholder="Nhập tên combo"
-                              {...registerCreate(`combos.${index}.name`, { required: "Tên combo là bắt buộc" })}
-                            />
-                            {createErrors.combos?.[index]?.name && (
-                              <p className="text-xs text-red-500 mt-1">{createErrors.combos[index]?.name?.message}</p>
-                            )}
-                          </div>
-                          <div className="col-span-12 md:col-span-3">
-                            <Label className="text-sm font-medium">
-                              Giá (VND) <span className="text-red-500">*</span>
-                            </Label>
-                            <Input
-                              className="mt-1.5"
-                              placeholder="0"
-                              value={watchCreate(`combos.${index}.price`) ? formatNumberInput(watchCreate(`combos.${index}.price`).toString()) : ''}
-                              onChange={(e) => {
-                                const formatted = formatNumberInput(e.target.value)
-                                const parsed = parseFormattedNumber(formatted)
-                                setValueCreate(`combos.${index}.price`, parsed, { shouldValidate: true })
-                              }}
-                              onBlur={(e) => {
-                                const parsed = parseFormattedNumber(e.target.value)
-                                if (parsed > 0) {
-                                  setValueCreate(`combos.${index}.price`, parsed, { shouldValidate: true })
-                                }
-                              }}
-                            />
-                            {createErrors.combos?.[index]?.price && (
-                              <p className="text-xs text-red-500 mt-1">{createErrors.combos[index]?.price?.message}</p>
-                            )}
-                          </div>
-                          <div className="col-span-12 md:col-span-2">
-                            <Label className="text-sm font-medium">Số lượng</Label>
-                            <Input
-                              className="mt-1.5"
-                              type="number"
-                              placeholder="1"
-                              {...registerCreate(`combos.${index}.quantity`, { valueAsNumber: true, min: 1 })}
-                            />
-                          </div>
-                          <div className="col-span-12 md:col-span-2 flex justify-end md:justify-start pt-7">
-                            {comboFields.length > 1 && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  // Xóa ảnh combo nếu có
-                                  const comboImageUrl = createComboImageUrls[index]
-                                  if (comboImageUrl) {
-                                    deleteImage(comboImageUrl)
-                                    const newUrls = { ...createComboImageUrls }
-                                    delete newUrls[index]
-                                    setCreateComboImageUrls(newUrls)
-                                  }
-                                  removeCombo(index)
-                                }}
-                                className="h-8 w-8 text-gray-400 hover:text-red-500"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-12 gap-4 border-t pt-4">
-                          <div className="col-span-12 md:col-span-3">
-                            <Label className="text-sm font-medium">Giá khuyến mại (VND)</Label>
-                            <Input
-                              className="mt-1.5"
-                              placeholder="0"
-                              value={watchCreate(`combos.${index}.promotionalPrice`) ? formatNumberInput(String(watchCreate(`combos.${index}.promotionalPrice`))) : ''}
-                              onChange={(e) => {
-                                const formatted = formatNumberInput(e.target.value)
-                                const parsed = parseFormattedNumber(formatted)
-                                setValueCreate(`combos.${index}.promotionalPrice`, parsed > 0 ? parsed : undefined, { shouldValidate: true })
-                              }}
-                              onBlur={(e) => {
-                                const parsed = parseFormattedNumber(e.target.value)
-                                if (parsed > 0) {
-                                  setValueCreate(`combos.${index}.promotionalPrice`, parsed, { shouldValidate: true })
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="col-span-12 md:col-span-3">
-                            <Label className="text-sm font-medium">Bắt đầu khuyến mại</Label>
-                            <Input
-                              className="mt-1.5"
-                              type="datetime-local"
-                              {...registerCreate(`combos.${index}.promotionStart`)}
-                            />
-                          </div>
-                          <div className="col-span-12 md:col-span-3">
-                            <Label className="text-sm font-medium">Kết thúc khuyến mại</Label>
-                            <Input
-                              className="mt-1.5"
-                              type="datetime-local"
-                              {...registerCreate(`combos.${index}.promotionEnd`)}
-                            />
-                          </div>
-                          <div className="col-span-12 md:col-span-3 flex items-center space-x-2 pt-7">
-                            <Switch
-                              id={`create-combo-promotion-${index}`}
-                              checked={watchCreate(`combos.${index}.isPromotionActive`) || false}
-                              onCheckedChange={(checked) => setValueCreate(`combos.${index}.isPromotionActive`, checked)}
-                            />
-                            <Label htmlFor={`create-combo-promotion-${index}`} className="text-sm cursor-pointer">
-                              Kích hoạt khuyến mại
-                            </Label>
-                          </div>
-                        </div>
-                      </div>
-                      )
-                    })}
-                    {comboFields.length === 0 && (
-                      <div className="text-center py-8 text-gray-500 border border-dashed rounded-lg">
-                        <Package className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                        <p className="text-sm mb-4">Chưa có combo nào</p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => appendCombo({ name: "", price: 0, quantity: 1, isActive: true })}
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          Thêm combo đầu tiên
-                        </Button>
-                      </div>
-                    )}
-                  </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>Lưu ý:</strong> Sau khi tạo sản phẩm, bạn sẽ được chuyển đến trang chi tiết để thêm combo và sản phẩm trong kho.
+                  </p>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
@@ -477,20 +261,15 @@ export default function ProductsPage() {
                     type="button"
                     variant="outline"
                     onClick={() => {
-                      // Xóa tất cả ảnh đã upload khi hủy
+                      // Xóa ảnh đã upload khi hủy
                       if (createProductImageUrl) {
                         deleteImage(createProductImageUrl)
                       }
-                      Object.values(createComboImageUrls).forEach(url => {
-                        if (url) deleteImage(url)
-                      })
                       setIsCreateOpen(false)
                       resetCreateForm({
                         isActive: true,
-                        combos: [{ name: "", price: 0, quantity: 1, isActive: true }],
                       })
                       setCreateProductImageUrl(null)
-                      setCreateComboImageUrls({})
                     }}
                     disabled={createMutation.isPending}
                   >
@@ -557,7 +336,7 @@ export default function ProductsPage() {
                   <TableRow>
                     <TableHead>Tên sản phẩm</TableHead>
                     <TableHead>Danh mục</TableHead>
-                    <TableHead>Số lượng</TableHead>
+                    <TableHead>Tổng sản phẩm</TableHead>
                     <TableHead>Combo</TableHead>
                     <TableHead>Trạng thái</TableHead>
                     <TableHead>Ngày tạo</TableHead>
@@ -574,7 +353,14 @@ export default function ProductsPage() {
                         </Link>
                       </TableCell>
                       <TableCell>{product?.category?.name || "-"}</TableCell>
-                      <TableCell>{product?.quantity || 0}</TableCell>
+                      <TableCell>
+                        {(() => {
+                          const totalItems = product?.combos?.reduce((sum, combo) => {
+                            return sum + (combo?.items?.reduce((itemSum, item) => itemSum + item.quantity, 0) || 0)
+                          }, 0) || 0
+                          return totalItems
+                        })()}
+                      </TableCell>
                       <TableCell>
                         {(() => {
                           const activeCombos = product?.combos?.filter((combo) => combo?.isActive) || []
@@ -586,56 +372,133 @@ export default function ProductsPage() {
                                   <ChevronDown className="ml-1 h-3 w-3" />
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-80" align="start">
-                                <div className="space-y-2">
-                                  <h4 className="font-medium text-sm mb-3">Danh sách combo ({activeCombos.length})</h4>
-                                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                                    {activeCombos.map((combo) => (
-                                      <div
-                                        key={combo?.id}
-                                        className="p-2 border rounded-lg space-y-1"
-                                      >
-                                        <div className="flex items-center justify-between">
-                                          <span className="font-medium text-sm">{combo?.name}</span>
+                              <PopoverContent className="w-96" align="start">
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between pb-2 border-b">
+                                    <h4 className="font-semibold text-base">Danh sách combo</h4>
+                                    <Badge variant="secondary" className="text-xs font-semibold">
+                                      {activeCombos.length} combo
+                                    </Badge>
+                                  </div>
+                                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                                    {activeCombos.map((combo) => {
+                                      const mainProducts = combo?.items?.filter(item => !item.isGift) || []
+                                      const giftProducts = combo?.items?.filter(item => item.isGift) || []
+                                      
+                                      return (
+                                        <div
+                                          key={combo?.id}
+                                          className="group relative p-4 border-2 border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-md transition-all duration-200 bg-gradient-to-br from-white to-gray-50"
+                                        >
+                                          {/* Promotion Badge */}
                                           {combo?.isPromotionActive && (
-                                            <Badge variant="destructive" className="text-xs">
-                                              🔥 Khuyến mại
-                                            </Badge>
+                                            <div className="absolute top-2 right-2">
+                                              <Badge variant="destructive" className="text-[10px] px-2 py-0.5 font-semibold animate-pulse">
+                                                🔥 Khuyến mãi
+                                              </Badge>
+                                            </div>
                                           )}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-xs text-gray-600">
-                                          {combo?.promotionalPrice && combo?.isPromotionActive ? (
-                                            <>
-                                              <span className="line-through text-gray-400">
-                                                {new Intl.NumberFormat("vi-VN", {
-                                                  style: "currency",
-                                                  currency: "VND",
-                                                }).format(combo.price)}
-                                              </span>
-                                              <span className="font-bold text-gray-900">
-                                                {new Intl.NumberFormat("vi-VN", {
-                                                  style: "currency",
-                                                  currency: "VND",
-                                                }).format(combo.promotionalPrice)}
-                                              </span>
-                                            </>
-                                          ) : (
-                                            <span>
-                                              Giá:{" "}
-                                              {new Intl.NumberFormat("vi-VN", {
-                                                style: "currency",
-                                                currency: "VND",
-                                              }).format(combo?.price || 0)}
-                                            </span>
-                                          )}
-                                        </div>
-                                        {combo?.quantity !== undefined && (
-                                          <div className="text-xs text-gray-500">
-                                            Số lượng: {combo.quantity} sản phẩm
+
+                                          {/* Combo Name */}
+                                          <div className="pr-16 mb-3">
+                                            <h5 className="font-bold text-sm text-gray-900 line-clamp-2 leading-tight">
+                                              {combo?.name}
+                                            </h5>
                                           </div>
-                                        )}
-                                      </div>
-                                    ))}
+
+                                          {/* Price Section */}
+                                          <div className="mb-3 p-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+                                            {combo?.promotionalPrice && combo?.isPromotionActive ? (
+                                              <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                  <span className="text-xs text-gray-500 line-through">
+                                                    {new Intl.NumberFormat("vi-VN", {
+                                                      style: "currency",
+                                                      currency: "VND",
+                                                    }).format(combo.price)}
+                                                  </span>
+                                                  <Badge variant="destructive" className="text-[9px] px-1.5 py-0 font-bold">
+                                                    -{Math.round(((combo.price - combo.promotionalPrice) / combo.price) * 100)}%
+                                                  </Badge>
+                                                </div>
+                                                <div className="text-lg font-bold text-red-600">
+                                                  {new Intl.NumberFormat("vi-VN", {
+                                                    style: "currency",
+                                                    currency: "VND",
+                                                  }).format(combo.promotionalPrice)}
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="text-lg font-bold text-gray-900">
+                                                {new Intl.NumberFormat("vi-VN", {
+                                                  style: "currency",
+                                                  currency: "VND",
+                                                }).format(combo?.price || 0)}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Products List */}
+                                          {combo?.items && combo.items.length > 0 && (
+                                            <div className="space-y-2 pt-2 border-t border-gray-200">
+                                              {mainProducts.length > 0 && (
+                                                <div className="space-y-1.5">
+                                                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+                                                    Sản phẩm chính:
+                                                  </p>
+                                                  <div className="space-y-1">
+                                                    {mainProducts.map((item, idx) => (
+                                                      <div key={idx} className="flex items-center gap-2 text-xs text-gray-700">
+                                                        <div className="h-1.5 w-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+                                                        <span className="font-medium flex-1">{item.inventoryProduct?.name}</span>
+                                                        <span className="text-gray-500">x{item.quantity}</span>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              )}
+                                              
+                                              {giftProducts.length > 0 && (
+                                                <div className="space-y-1.5 pt-2 border-t border-gray-200">
+                                                  <p className="text-[10px] font-semibold text-green-600 uppercase tracking-wide">
+                                                    Tặng kèm:
+                                                  </p>
+                                                  <div className="space-y-1">
+                                                    {giftProducts.map((item, idx) => (
+                                                      <div key={idx} className="flex items-center gap-2 text-xs text-gray-700">
+                                                        <div className="h-1.5 w-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                                        <span className="font-medium flex-1">{item.inventoryProduct?.name}</span>
+                                                        <span className="text-gray-500">x{item.quantity}</span>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          {/* Promotion Dates */}
+                                          {(combo?.promotionStart || combo?.promotionEnd) && (
+                                            <div className="mt-2 pt-2 border-t border-gray-200">
+                                              <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                                                {combo?.promotionStart && (
+                                                  <div>
+                                                    <span className="font-semibold">Bắt đầu:</span>{" "}
+                                                    {new Date(combo.promotionStart).toLocaleDateString("vi-VN")}
+                                                  </div>
+                                                )}
+                                                {combo?.promotionEnd && (
+                                                  <div>
+                                                    <span className="font-semibold">Kết thúc:</span>{" "}
+                                                    {new Date(combo.promotionEnd).toLocaleDateString("vi-VN")}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    })}
                                   </div>
                                 </div>
                               </PopoverContent>

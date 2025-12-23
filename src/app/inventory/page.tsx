@@ -12,7 +12,8 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Loader2, AlertTriangle, Plus, Search, Filter } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Loader2, AlertTriangle, Plus, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import Link from "next/link"
 import { useState, useMemo } from "react"
@@ -21,34 +22,46 @@ export default function InventoryPage() {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [expiryDateFrom, setExpiryDateFrom] = useState<string>("")
-  const [expiryDateTo, setExpiryDateTo] = useState<string>("")
+  const [activeTab, setActiveTab] = useState<"all" | "valid" | "expired">("all")
+  const [expiryDate, setExpiryDate] = useState<string>("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   
   // Temporary filter states for dialog
-  const [tempExpiryDateFrom, setTempExpiryDateFrom] = useState<string>("")
-  const [tempExpiryDateTo, setTempExpiryDateTo] = useState<string>("")
+  const [tempExpiryDate, setTempExpiryDate] = useState<string>("")
   const [tempCategoryFilter, setTempCategoryFilter] = useState<string>("all")
   
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(20)
+
   const { data: productsResponse, isLoading } = useQuery({
-    queryKey: ["inventory-products", expiryDateFrom, expiryDateTo, categoryFilter],
+    queryKey: ["inventory-items", page, pageSize, expiryDate, categoryFilter, activeTab],
     queryFn: () => {
-      const params: { expiryDateFrom?: string; expiryDateTo?: string; categoryId?: string } = {}
-      if (expiryDateFrom) params.expiryDateFrom = expiryDateFrom
-      if (expiryDateTo) params.expiryDateTo = expiryDateTo
-      if (categoryFilter !== "all") params.categoryId = categoryFilter
-      return inventoryProductsApi.getAll(Object.keys(params).length > 0 ? params : undefined)
+      const params: { groupByProduct?: boolean; expiryDate?: string; productId?: string; page?: number; pageSize?: number; status?: "all" | "valid" | "expired" } = {
+        groupByProduct: true,
+        page,
+        pageSize,
+        status: activeTab, // Gửi status từ tab hiện tại
+      }
+      // Chỉ gửi 1 parameter ngày thay vì from và to
+      if (expiryDate) {
+        params.expiryDate = expiryDate
+      }
+      if (categoryFilter !== "all") params.productId = categoryFilter // Note: API có thể không hỗ trợ categoryId, cần filter ở client
+      return inventoryProductsApi.getItems(params)
     },
   })
 
-  // Extract products array from paginated or non-paginated response
-  const products = useMemo(() => {
-    if (!productsResponse) return undefined
-    if (Array.isArray(productsResponse)) return productsResponse
+  // Extract products array and pagination meta from paginated or non-paginated response
+  const { products, paginationMeta } = useMemo(() => {
+    if (!productsResponse) return { products: undefined, paginationMeta: undefined }
+    if (Array.isArray(productsResponse)) return { products: productsResponse, paginationMeta: undefined }
     if ('data' in productsResponse && Array.isArray(productsResponse.data)) {
-      return productsResponse.data
+      return {
+        products: productsResponse.data,
+        paginationMeta: 'meta' in productsResponse ? productsResponse.meta : undefined
+      }
     }
-    return []
+    return { products: [], paginationMeta: undefined }
   }, [productsResponse])
 
   const { data: categoriesResponse } = useQuery({
@@ -71,63 +84,67 @@ export default function InventoryPage() {
     return products.find(p => p.id === selectedProductId) || null
   }, [selectedProductId, products])
 
-  // Tính tổng số lượng và lấy các items sắp hết hạn trong khoảng thời gian được chọn
+  // Tính tổng số lượng và phân loại items theo trạng thái hết hạn
   const productsWithStats = useMemo(() => {
     if (!products) return []
     
-    const hasDateFilter = expiryDateFrom || expiryDateTo
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
     
     return products.map(product => {
+      // API trả về inventoryItems đã được sắp xếp theo ngày hết hạn (sớm nhất trước)
       const totalQuantity = product.inventoryItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0
       
-      // Lấy các items sắp hết hạn trong khoảng thời gian được chọn
-      let expiringItems: typeof product.inventoryItems = []
+      // Phân loại items thành valid và expired
+      const validItems = product.inventoryItems?.filter(item => {
+        if (!item.expiryDate) return false
+        const expiryDate = new Date(item.expiryDate)
+        expiryDate.setHours(0, 0, 0, 0)
+        return expiryDate >= today
+      }) || []
       
-      if (hasDateFilter) {
-        const fromDate = expiryDateFrom ? new Date(expiryDateFrom) : null
-        const toDate = expiryDateTo ? new Date(expiryDateTo) : null
+      const expiredItems = product.inventoryItems?.filter(item => {
+        if (!item.expiryDate) return false
+        const expiryDate = new Date(item.expiryDate)
+        expiryDate.setHours(0, 0, 0, 0)
+        return expiryDate < today
+      }) || []
+      
+      // Nếu có filter theo ngày, lọc items theo ngày đó
+      let filteredValidItems = validItems
+      let filteredExpiredItems = expiredItems
+      
+      if (expiryDate) {
+        const filterDate = new Date(expiryDate)
+        filterDate.setHours(0, 0, 0, 0)
         
-        if (fromDate) fromDate.setHours(0, 0, 0, 0)
-        if (toDate) toDate.setHours(23, 59, 59, 999)
-        
-        expiringItems = product.inventoryItems?.filter(item => {
+        filteredValidItems = validItems.filter(item => {
           if (!item.expiryDate) return false
-          const expiryDate = new Date(item.expiryDate)
-          expiryDate.setHours(0, 0, 0, 0)
-          
-          if (fromDate && toDate) {
-            return expiryDate >= fromDate && expiryDate <= toDate
-          } else if (fromDate) {
-            return expiryDate >= fromDate
-          } else if (toDate) {
-            return expiryDate <= toDate
-          }
-          return false
-        }) || []
-      } else {
-        // Mặc định: 7 ngày tới
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const sevenDaysLater = new Date(today)
-        sevenDaysLater.setDate(sevenDaysLater.getDate() + 7)
+          const itemExpiryDate = new Date(item.expiryDate)
+          itemExpiryDate.setHours(0, 0, 0, 0)
+          return itemExpiryDate.getTime() === filterDate.getTime()
+        })
         
-        expiringItems = product.inventoryItems?.filter(item => {
+        filteredExpiredItems = expiredItems.filter(item => {
           if (!item.expiryDate) return false
-          const expiryDate = new Date(item.expiryDate)
-          expiryDate.setHours(0, 0, 0, 0)
-          return expiryDate >= today && expiryDate <= sevenDaysLater
-        }) || []
+          const itemExpiryDate = new Date(item.expiryDate)
+          itemExpiryDate.setHours(0, 0, 0, 0)
+          return itemExpiryDate.getTime() === filterDate.getTime()
+        })
       }
       
       return {
         ...product,
         totalQuantity,
-        expiringItems,
+        validItems: filteredValidItems,
+        expiredItems: filteredExpiredItems,
+        allItems: product.inventoryItems || [],
       }
     })
-  }, [products, expiryDateFrom, expiryDateTo])
+  }, [products, expiryDate])
 
   // Filter products based on search query and category
+  // Note: Filter by status (tab) đã được xử lý ở API
   const filteredProducts = useMemo(() => {
     if (!productsWithStats) return []
     
@@ -169,17 +186,20 @@ export default function InventoryPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Quản lý Kho hàng</h1>
-          <Link href="/inventory-import">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Nhập kho
-            </Button>
-          </Link>
-        </div>
-
         <Card>
+          {/* Tabs ở trên cùng của Card */}
+          <div className="pb-0">
+            <Tabs value={activeTab} onValueChange={(v) => {
+              setActiveTab(v as "all" | "valid" | "expired")
+              setPage(1) // Reset về trang đầu khi đổi tab
+            }}>
+              <TabsList>
+                <TabsTrigger value="all">Tất cả</TabsTrigger>
+                <TabsTrigger value="valid">Còn hạn</TabsTrigger>
+                <TabsTrigger value="expired">Hết hạn</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
           <CardHeader>
             <div className="flex flex-col gap-4">
               <CardTitle>Danh sách sản phẩm kho</CardTitle>
@@ -193,12 +213,12 @@ export default function InventoryPage() {
                     className="pl-10"
                   />
                 </div>
-                <Sheet open={isFilterOpen} onOpenChange={(open) => {
+                <div className="flex gap-2">
+                  <Sheet open={isFilterOpen} onOpenChange={(open) => {
                   setIsFilterOpen(open)
                   if (open) {
                     // Initialize temp filters when dialog opens
-                    setTempExpiryDateFrom(expiryDateFrom)
-                    setTempExpiryDateTo(expiryDateTo)
+                    setTempExpiryDate(expiryDate)
                     setTempCategoryFilter(categoryFilter)
                   }
                 }}>
@@ -206,9 +226,9 @@ export default function InventoryPage() {
                     <Button variant="outline" className="w-full md:w-auto">
                       <Filter className="mr-2 h-4 w-4" />
                       Bộ lọc
-                      {(expiryDateFrom || expiryDateTo || categoryFilter !== "all") && (
+                      {(expiryDate || categoryFilter !== "all") && (
                         <Badge variant="secondary" className="ml-2">
-                          {[expiryDateFrom || expiryDateTo, categoryFilter !== "all"].filter(Boolean).length}
+                          {[expiryDate, categoryFilter !== "all"].filter(Boolean).length}
                         </Badge>
                       )}
                     </Button>
@@ -235,43 +255,25 @@ export default function InventoryPage() {
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-base font-semibold mb-4 block">Thời gian hết hạn</Label>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="expiry-from">Từ ngày</Label>
-                            <Input
-                              id="expiry-from"
-                              type="date"
-                              value={tempExpiryDateFrom}
-                              onChange={(e) => setTempExpiryDateFrom(e.target.value)}
-                              className="mt-2"
-                              max={tempExpiryDateTo || undefined}
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="expiry-to">Đến ngày</Label>
-                            <Input
-                              id="expiry-to"
-                              type="date"
-                              value={tempExpiryDateTo}
-                              onChange={(e) => setTempExpiryDateTo(e.target.value)}
-                              className="mt-2"
-                              min={tempExpiryDateFrom || undefined}
-                            />
-                          </div>
-                        </div>
+                        <Label htmlFor="expiry-date" className="text-base font-semibold mb-2 block">Ngày hết hạn</Label>
+                        <Input
+                          id="expiry-date"
+                          type="date"
+                          value={tempExpiryDate}
+                          onChange={(e) => setTempExpiryDate(e.target.value)}
+                          className="mt-2"
+                        />
                       </div>
                       <div className="flex gap-3 pt-4 border-t">
                         <Button
                           variant="outline"
                           className="flex-1"
                           onClick={() => {
-                            setTempExpiryDateFrom("")
-                            setTempExpiryDateTo("")
+                            setTempExpiryDate("")
                             setTempCategoryFilter("all")
-                            setExpiryDateFrom("")
-                            setExpiryDateTo("")
+                            setExpiryDate("")
                             setCategoryFilter("all")
+                            setPage(1) // Reset về trang đầu khi xóa filter
                             setIsFilterOpen(false)
                           }}
                         >
@@ -280,9 +282,9 @@ export default function InventoryPage() {
                         <Button
                           className="flex-1"
                           onClick={() => {
-                            setExpiryDateFrom(tempExpiryDateFrom)
-                            setExpiryDateTo(tempExpiryDateTo)
+                            setExpiryDate(tempExpiryDate)
                             setCategoryFilter(tempCategoryFilter)
+                            setPage(1) // Reset về trang đầu khi áp dụng filter
                             setIsFilterOpen(false)
                           }}
                         >
@@ -292,6 +294,13 @@ export default function InventoryPage() {
                     </div>
                   </SheetContent>
                 </Sheet>
+                <Link href="/inventory-import">
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nhập kho
+                  </Button>
+                </Link>
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -301,72 +310,111 @@ export default function InventoryPage() {
                 <Loader2 className="h-6 w-6 animate-spin" />
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                    <TableRow>
-                      <TableHead>STT</TableHead>
-                      <TableHead>Sản phẩm</TableHead>
-                      <TableHead>Danh mục</TableHead>
-                      <TableHead>Tổng số lượng</TableHead>
-                      <TableHead>
-                        {(expiryDateFrom || expiryDateTo) ? "Số lô hết hạn" : "Số lô hàng"}
-                      </TableHead>
-                      <TableHead>Thao tác</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProducts && filteredProducts.length > 0 ? (
-                    filteredProducts.map((product, index) => {
-                      return (
-                        <TableRow 
-                          key={product.id}
-                          className="cursor-pointer hover:bg-gray-50"
-                          onClick={() => setSelectedProductId(product.id)}
-                        >
-                          <TableCell>{index + 1}</TableCell>
-                          <TableCell className="font-medium">
-                            {product.name}
-                          </TableCell>
-                          <TableCell>
-                            {product.category ? (
-                              <Badge variant="outline">{product.category.name}</Badge>
-                            ) : (
-                              "-"
-                            )}
-                          </TableCell>
-                          <TableCell className="font-semibold">{product.totalQuantity}</TableCell>
-                          <TableCell>
-                            {(expiryDateFrom || expiryDateTo) ? (
-                              <Badge variant={product.expiringItems.length > 0 ? "destructive" : "outline"}>
-                                {product.expiringItems.length || 0}
-                              </Badge>
-                            ) : (
-                              product.inventoryItems?.length || 0
-                            )}
-                          </TableCell>
-                          <TableCell onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setSelectedProductId(product.id)}
-                            >
-                              Xem chi tiết
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                        {searchQuery || expiryDateFrom || expiryDateTo || categoryFilter !== "all"
-                          ? "Không tìm thấy sản phẩm nào phù hợp" 
-                          : "Không có sản phẩm nào"}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              <>
+                <Table>
+                  <TableHeader>
+                      <TableRow>
+                        <TableHead>STT</TableHead>
+                        <TableHead>Sản phẩm</TableHead>
+                        <TableHead>Danh mục</TableHead>
+                        <TableHead>Tổng số lượng</TableHead>
+                        <TableHead>
+                          {activeTab === "valid" ? "Số lô còn hạn" : 
+                           activeTab === "expired" ? "Số lô hết hạn" : 
+                           "Số lô hàng"}
+                        </TableHead>
+                        <TableHead>Thao tác</TableHead>
+                      </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredProducts && filteredProducts.length > 0 ? (
+                      filteredProducts.map((product, index) => {
+                        return (
+                          <TableRow 
+                            key={product.id}
+                            className="cursor-pointer hover:bg-gray-50"
+                            onClick={() => setSelectedProductId(product.id)}
+                          >
+                            <TableCell>{index + 1}</TableCell>
+                            <TableCell className="font-medium">
+                              {product.name}
+                            </TableCell>
+                            <TableCell>
+                              {product.category ? (
+                                <Badge variant="outline">{product.category.name}</Badge>
+                              ) : (
+                                "-"
+                              )}
+                            </TableCell>
+                            <TableCell className="font-semibold">{product.totalQuantity}</TableCell>
+                            <TableCell>
+                              {activeTab === "valid" ? (
+                                <Badge variant="default" className="bg-green-500">
+                                  {product.validItems?.length || 0}
+                                </Badge>
+                              ) : activeTab === "expired" ? (
+                                <Badge variant="destructive">
+                                  {product.expiredItems?.length || 0}
+                                </Badge>
+                              ) : (
+                                product.allItems?.length || 0
+                              )}
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedProductId(product.id)}
+                              >
+                                Xem chi tiết
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                          {searchQuery || expiryDate || categoryFilter !== "all"
+                            ? "Không tìm thấy sản phẩm nào phù hợp" 
+                            : "Không có sản phẩm nào"}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+                {/* Pagination Controls */}
+                {paginationMeta && paginationMeta.totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                    <div className="text-sm text-gray-500">
+                      Hiển thị {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, paginationMeta.total)} trong tổng số {paginationMeta.total} sản phẩm
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page === 1 || isLoading}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm">
+                        Trang {page} / {paginationMeta.totalPages}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.min(paginationMeta.totalPages, p + 1))}
+                        disabled={page >= paginationMeta.totalPages || isLoading}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

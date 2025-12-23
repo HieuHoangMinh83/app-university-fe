@@ -1,5 +1,6 @@
 import apiClient from "@/lib/api-client";
 import { Order } from "./orders";
+import { Voucher } from "./vouchers";
 import { PaginationParams, PaginatedResponse } from "./types";
 
 export interface Client {
@@ -17,6 +18,23 @@ export interface Client {
     orders: number;
   };
   orders?: Order[]; // Orders included when fetching by ID
+  clientVouchers?: ClientVoucher[]; // Client vouchers included when fetching by ID
+}
+
+export interface ClientVoucher {
+  id: string;
+  clientId: string;
+  voucherId: string;
+  voucher: Voucher;
+  isActive: boolean;
+  isUsed: boolean;
+  usedAt: string | null;
+  createdAt: string;
+}
+
+export interface RedeemVoucherDto {
+  voucherId: string;
+  clientId?: string; // Optional, sẽ được thêm khi gọi API
 }
 
 export interface CreateClientDto {
@@ -102,6 +120,23 @@ export const clientsApi = {
   // Xóa client (nếu có quyền)
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/clients/${id}`);
+  },
+
+  // Lấy danh sách voucher của khách hàng
+  getClientVouchers: async (clientId: string): Promise<ClientVoucher[]> => {
+    console.log(`[API] Calling GET /vouchers/client/${clientId}`);
+    const response = await apiClient.get(`/vouchers/client/${clientId}`);
+    console.log(`[API] Response:`, response?.data);
+    return response?.data?.data || response?.data || [];
+  },
+
+  // Đổi voucher cho khách hàng
+  redeemVoucher: async (clientId: string, data: RedeemVoucherDto): Promise<ClientVoucher> => {
+    const response = await apiClient.post(`/vouchers/redeem`, {
+      clientId,
+      voucherId: data.voucherId,
+    });
+    return response?.data?.data || response?.data;
   },
 };
 

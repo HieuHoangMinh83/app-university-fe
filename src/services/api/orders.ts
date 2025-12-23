@@ -56,7 +56,8 @@ export interface CreateOrderDto {
     quantity: number;
     clientComboId?: string;
   }>;
-  voucherId?: string;
+  voucherId?: string; // Deprecated: Dùng clientVoucherId thay thế
+  clientVoucherId?: string; // ID của ClientVoucher trong ví của client
 }
 
 export interface UpdateOrderStatusDto {

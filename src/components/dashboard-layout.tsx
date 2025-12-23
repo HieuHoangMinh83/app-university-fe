@@ -141,7 +141,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
                 {/* Navigation */}
                 <div className="flex-1 py-4 overflow-y-auto">
-                    <nav className="space-y-2 px-4">
+                    <nav className="space-y-2 pr-4 pl-1">
                         {menuItems.map((section, sectionIdx) => (
                             <div key={sectionIdx} className="mb-6">
                                 <div className="text-xs font-semibold text-white/60 uppercase tracking-wider mb-2 px-3">

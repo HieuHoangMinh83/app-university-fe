@@ -1,35 +1,30 @@
 import apiClient from "@/lib/api-client";
 import { PaginationParams, PaginatedResponse } from "./types";
 
-export interface ComboGift {
+export interface ComboItem {
   id: string;
-  giftCombo: {
-    id: string;
-    name: string;
-    price: number;
-    quantity: number;
-  };
+  inventoryProductId: string;
   quantity: number;
-  createdBy: {
+  isGift: boolean;
+  inventoryProduct: {
     id: string;
     name: string;
-    phone: string;
   };
-  createdAt: string;
 }
 
 export interface Combo {
   id: string;
   name: string;
   price: number;
-  quantity: number;
   isActive: boolean;
   image: string | null;
   promotionalPrice?: number | null;
   promotionStart?: string | null;
   promotionEnd?: string | null;
   isPromotionActive?: boolean;
-  giftCombos?: ComboGift[];
+  items: ComboItem[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Product {
@@ -42,7 +37,7 @@ export interface Product {
     name: string;
   } | null;
   isActive: boolean;
-  quantity: number;
+  spinCount?: number;
   image: string | null;
   combos: Combo[];
   createdBy: {
@@ -50,7 +45,7 @@ export interface Product {
     name: string;
     phone: string;
   };
-  updatedBy: {
+  updatedBy?: {
     id: string;
     name: string;
     phone: string;
@@ -62,28 +57,23 @@ export interface Product {
 export interface CreateProductDto {
   name: string;
   description?: string;
-  categoryId: string; // required
+  categoryId?: string;
   isActive?: boolean;
-  quantity?: number;
-  image?: string; // chỉ 1 ảnh
+  spinCount?: number;
+  image?: string;
   combos: Array<{
     name: string;
     price: number;
-    quantity?: number;
     isActive?: boolean;
-    image?: string; // chỉ 1 ảnh
+    image?: string;
     promotionalPrice?: number;
     promotionStart?: string;
     promotionEnd?: string;
     isPromotionActive?: boolean;
-    items?: Array<{
+    items: Array<{
       inventoryProductId: string;
       quantity: number;
       isGift?: boolean;
-    }>;
-    giftCombos?: Array<{
-      giftComboId: string; // có thể là UUID, index "0", "1", hoặc name "Combo 2"
-      quantity?: number;
     }>;
   }>;
 }
@@ -93,21 +83,20 @@ export interface UpdateProductDto {
   description?: string;
   categoryId?: string;
   isActive?: boolean;
-  quantity?: number;
-  image?: string; // chỉ 1 ảnh
+  spinCount?: number;
+  image?: string;
 }
 
 export interface CreateComboDto {
   name: string;
   price: number;
-  quantity?: number;
   isActive?: boolean;
-  image?: string; // chỉ 1 ảnh
+  image?: string;
   promotionalPrice?: number;
   promotionStart?: string;
   promotionEnd?: string;
   isPromotionActive?: boolean;
-  items?: Array<{
+  items: Array<{
     inventoryProductId: string;
     quantity: number;
     isGift?: boolean;
@@ -117,9 +106,8 @@ export interface CreateComboDto {
 export interface UpdateComboDto {
   name?: string;
   price?: number;
-  quantity?: number;
   isActive?: boolean;
-  image?: string; // chỉ 1 ảnh
+  image?: string;
   promotionalPrice?: number;
   promotionStart?: string;
   promotionEnd?: string;
@@ -188,21 +176,5 @@ export const productsApi = {
     await apiClient.delete(`/products/combos/${comboId}`);
   },
 
-  // Thêm combo gift
-  addComboGift: async (comboId: string, data: { giftComboId: string; quantity?: number; isActive?: boolean }): Promise<ComboGift> => {
-    const response = await apiClient.post(`/products/combos/${comboId}/gifts`, data);
-    return response?.data?.data || response?.data;
-  },
-
-  // Lấy danh sách combo gifts
-  getComboGifts: async (comboId: string) => {
-    const response = await apiClient.get(`/products/combos/${comboId}/gifts`);
-    return response?.data?.data || response?.data;
-  },
-
-  // Xóa combo gift
-  deleteComboGift: async (comboGiftId: string): Promise<void> => {
-    await apiClient.delete(`/products/combos/gifts/${comboGiftId}`);
-  },
 };
 

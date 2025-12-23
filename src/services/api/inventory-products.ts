@@ -43,7 +43,10 @@ export interface InventoryProduct {
   updatedById: string | null;
   createdAt: string;
   updatedAt: string;
-  inventoryItems: InventoryItem[];
+  inventoryItems?: InventoryItem[];
+  validItems?: InventoryItem[]; // Items còn hạn
+  expiredItems?: InventoryItem[]; // Items hết hạn
+  validQuantity?: number; // Số lượng còn hạn (từ API /inventory-products)
   createdBy: {
     id: string;
     name: string;
@@ -76,16 +79,23 @@ export interface GetInventoryProductsParams extends PaginationParams {
   categoryId?: string;
 }
 
+export interface GetInventoryItemsParams extends PaginationParams {
+  productId?: string;
+  groupByProduct?: boolean;
+  expiryDate?: string; // Chỉ dùng 1 parameter ngày thay vì expiryDateFrom và expiryDateTo
+  status?: "all" | "valid" | "expired";
+}
+
 export const inventoryProductsApi = {
   // Lấy tất cả inventory products
   getAll: async (params?: GetInventoryProductsParams): Promise<InventoryProduct[] | PaginatedResponse<InventoryProduct>> => {
     const response = await apiClient.get("/inventory-products", { params });
-    // Check if response has pagination structure: { data: { data: [...], meta: {...} } }
-    if (response?.data?.data?.data && response?.data?.data?.meta) {
+    // Check if response has nested pagination structure: { data: { data: [...], meta: {...} } }
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data) && response?.data?.data?.meta) {
       return response.data.data as PaginatedResponse<InventoryProduct>;
     }
     // Check if response is direct paginated: { data: [...], meta: {...} }
-    if (response?.data?.data && response?.data?.meta && Array.isArray(response.data.data)) {
+    if (response?.data?.data && Array.isArray(response.data.data) && response?.data?.meta) {
       return response.data as PaginatedResponse<InventoryProduct>;
     }
     // Fallback to non-paginated response
@@ -114,6 +124,22 @@ export const inventoryProductsApi = {
   // Xóa inventory product
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/inventory-products/${id}`);
+  },
+
+  // Lấy danh sách lô hàng chi tiết
+  getItems: async (params?: GetInventoryItemsParams): Promise<InventoryProduct[] | PaginatedResponse<InventoryProduct>> => {
+    const response = await apiClient.get("/inventory-products/items", { params });
+    // Check if response has nested pagination structure: { data: { data: [...], meta: {...} } }
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data) && response?.data?.data?.meta) {
+      return response.data.data as PaginatedResponse<InventoryProduct>;
+    }
+    // Check if response is direct paginated: { data: [...], meta: {...} }
+    if (response?.data?.data && Array.isArray(response.data.data) && response?.data?.meta) {
+      return response.data as PaginatedResponse<InventoryProduct>;
+    }
+    // Fallback to non-paginated response
+    const data = response?.data?.data || response?.data;
+    return Array.isArray(data) ? data : [];
   },
 };
 

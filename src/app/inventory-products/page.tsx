@@ -8,36 +8,61 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { useForm } from "react-hook-form"
-import { Plus, Pencil, Trash2, Loader2, Package, Search } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, Package, Search, ChevronLeft, ChevronRight, AlertTriangle, Filter } from "lucide-react"
 import { toast } from "sonner"
 import DashboardLayout from "@/components/dashboard-layout"
 
 export default function InventoryProductsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isItemsDialogOpen, setIsItemsDialogOpen] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<InventoryProduct | null>(null)
+  const [itemsTab, setItemsTab] = useState<"all" | "valid" | "expired">("all")
   const [editingProduct, setEditingProduct] = useState<InventoryProduct | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(20)
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState<string>("all")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  // Temporary filter states for dialog
+  const [tempCategoryFilter, setTempCategoryFilter] = useState<string>("all")
+  const [tempStatusFilter, setTempStatusFilter] = useState<string>("all")
   const queryClient = useQueryClient()
 
   const { data: productsResponse, isLoading } = useQuery({
-    queryKey: ["inventory-products"],
-    queryFn: () => inventoryProductsApi.getAll(),
+    queryKey: ["inventory-products", page, pageSize, categoryFilter],
+    queryFn: () => {
+      const params: { page?: number; pageSize?: number; categoryId?: string } = {
+        page,
+        pageSize,
+      }
+      if (categoryFilter !== "all") {
+        params.categoryId = categoryFilter
+      }
+      return inventoryProductsApi.getAll(params)
+    },
   })
 
-  // Extract products array from paginated or non-paginated response
-  const products = useMemo(() => {
-    if (!productsResponse) return undefined
-    if (Array.isArray(productsResponse)) return productsResponse
+  // Extract products array and pagination meta from paginated or non-paginated response
+  const { products, paginationMeta } = useMemo(() => {
+    if (!productsResponse) return { products: undefined, paginationMeta: undefined }
+    if (Array.isArray(productsResponse)) return { products: productsResponse, paginationMeta: undefined }
     if ('data' in productsResponse && Array.isArray(productsResponse.data)) {
-      return productsResponse.data
+      return {
+        products: productsResponse.data,
+        paginationMeta: 'meta' in productsResponse ? productsResponse.meta : undefined
+      }
     }
-    return []
+    return { products: [], paginationMeta: undefined }
   }, [productsResponse])
 
   const { data: categoriesResponse } = useQuery({
@@ -140,15 +165,47 @@ export default function InventoryProductsPage() {
     }
   }
 
-  // Filter products based on search query
+  const handleViewItems = (product: InventoryProduct, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    setSelectedProduct(product)
+    setItemsTab("all") // Reset về tab "Tất cả" khi mở dialog mới
+    setIsItemsDialogOpen(true)
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("vi-VN")
+  }
+
+  const getDaysUntilExpiry = (expiryDate: string) => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const expiry = new Date(expiryDate)
+    expiry.setHours(0, 0, 0, 0)
+    const diffTime = expiry.getTime() - today.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    return diffDays
+  }
+
+  // Filter products based on search query and status
   const filteredProducts = Array.isArray(products) ? products.filter((product) => {
-    if (!searchQuery) return true
-    const query = searchQuery.toLowerCase()
-    return (
-      product?.name?.toLowerCase()?.includes(query) ||
-      product?.description?.toLowerCase()?.includes(query) ||
-      product?.category?.name?.toLowerCase()?.includes(query)
-    )
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      const matchesSearch = (
+        product?.name?.toLowerCase()?.includes(query) ||
+        product?.description?.toLowerCase()?.includes(query) ||
+        product?.category?.name?.toLowerCase()?.includes(query)
+      )
+      if (!matchesSearch) return false
+    }
+    
+    // Filter by status (isActive)
+    if (statusFilter !== "all") {
+      if (statusFilter === "active" && !product?.isActive) return false
+      if (statusFilter === "inactive" && product?.isActive) return false
+    }
+    
+    return true
   }) : []
 
   return (
@@ -168,6 +225,89 @@ export default function InventoryProductsPage() {
                     className="pl-10"
                   />
                 </div>
+                <Sheet open={isFilterOpen} onOpenChange={(open) => {
+                  setIsFilterOpen(open)
+                  if (open) {
+                    // Initialize temp filters when dialog opens
+                    setTempCategoryFilter(categoryFilter)
+                    setTempStatusFilter(statusFilter)
+                  }
+                }}>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" className="w-full md:w-auto">
+                      <Filter className="mr-2 h-4 w-4" />
+                      Bộ lọc
+                      {(categoryFilter !== "all" || statusFilter !== "all") && (
+                        <Badge variant="secondary" className="ml-2">
+                          {[categoryFilter !== "all", statusFilter !== "all"].filter(Boolean).length}
+                        </Badge>
+                      )}
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="w-full sm:max-w-md">
+                    <SheetHeader>
+                      <SheetTitle>Bộ lọc</SheetTitle>
+                    </SheetHeader>
+                    <div className="space-y-6 mt-6">
+                      <div>
+                        <Label htmlFor="filter-category" className="text-base font-semibold mb-2 block">Danh mục</Label>
+                        <Select value={tempCategoryFilter} onValueChange={setTempCategoryFilter}>
+                          <SelectTrigger className="mt-2">
+                            <SelectValue placeholder="Chọn danh mục" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Tất cả danh mục</SelectItem>
+                            {Array.isArray(categories) && categories.map((category) => (
+                              <SelectItem key={category?.id} value={category?.id}>
+                                {category?.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="filter-status" className="text-base font-semibold mb-2 block">Trạng thái</Label>
+                        <Select value={tempStatusFilter} onValueChange={setTempStatusFilter}>
+                          <SelectTrigger className="mt-2">
+                            <SelectValue placeholder="Chọn trạng thái" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Tất cả</SelectItem>
+                            <SelectItem value="active">Hoạt động</SelectItem>
+                            <SelectItem value="inactive">Không hoạt động</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex gap-3 pt-4 border-t">
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => {
+                            setTempCategoryFilter("all")
+                            setTempStatusFilter("all")
+                            setCategoryFilter("all")
+                            setStatusFilter("all")
+                            setPage(1) // Reset về trang đầu khi xóa filter
+                            setIsFilterOpen(false)
+                          }}
+                        >
+                          Xóa bộ lọc
+                        </Button>
+                        <Button
+                          className="flex-1"
+                          onClick={() => {
+                            setCategoryFilter(tempCategoryFilter)
+                            setStatusFilter(tempStatusFilter)
+                            setPage(1) // Reset về trang đầu khi áp dụng filter
+                            setIsFilterOpen(false)
+                          }}
+                        >
+                          Áp dụng
+                        </Button>
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
                 <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                   <DialogTrigger asChild>
                     <Button>
@@ -256,64 +396,359 @@ export default function InventoryProductsPage() {
                 <Loader2 className="h-6 w-6 animate-spin" />
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tên sản phẩm</TableHead>
-                    <TableHead>Danh mục</TableHead>
-                    <TableHead>Mô tả</TableHead>
-                    <TableHead>Trạng thái</TableHead>
-                    <TableHead>Ngày tạo</TableHead>
-                    <TableHead className="text-right">Thao tác</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProducts && filteredProducts.length > 0 ? (
-                    filteredProducts.map((product) => (
-                      <TableRow key={product?.id}>
-                        <TableCell className="font-medium">{product?.name}</TableCell>
-                        <TableCell>{product?.category?.name || "-"}</TableCell>
-                        <TableCell className="max-w-xs truncate">{product?.description || "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant={product?.isActive ? "default" : "secondary"}>
-                            {product?.isActive ? "Hoạt động" : "Không hoạt động"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {product?.createdAt ? new Date(product.createdAt).toLocaleDateString("vi-VN") : "-"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(product)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(product?.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tên sản phẩm</TableHead>
+                      <TableHead>Danh mục</TableHead>
+                      <TableHead>Mô tả</TableHead>
+                      <TableHead>Số lượng còn hạn</TableHead>
+                      <TableHead>Số lượng hết hạn</TableHead>
+                      <TableHead>Tổng số lượng</TableHead>
+                      <TableHead>Trạng thái</TableHead>
+                      <TableHead>Ngày tạo</TableHead>
+                      <TableHead className="text-right">Thao tác</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredProducts && filteredProducts.length > 0 ? (
+                      filteredProducts.map((product) => {
+                        // Tính số lượng từ validItems và expiredItems
+                        const validQuantity = product?.validItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0
+                        const expiredQuantity = product?.expiredItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0
+                        const totalQuantity = validQuantity + expiredQuantity
+                        return (
+                          <TableRow 
+                            key={product?.id}
+                            className="cursor-pointer hover:bg-gray-50"
+                            onClick={() => handleViewItems(product)}
+                          >
+                            <TableCell className="font-medium">{product?.name}</TableCell>
+                            <TableCell>{product?.category?.name || "-"}</TableCell>
+                            <TableCell className="max-w-xs truncate">{product?.description || "-"}</TableCell>
+                            <TableCell>
+                              <Badge variant="default" className="bg-green-500">
+                                {validQuantity}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="destructive">
+                                {expiredQuantity}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-medium">{totalQuantity}</TableCell>
+                            <TableCell>
+                              <Badge variant={product?.isActive ? "default" : "secondary"}>
+                                {product?.isActive ? "Hoạt động" : "Không hoạt động"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {product?.createdAt ? new Date(product.createdAt).toLocaleDateString("vi-VN") : "-"}
+                            </TableCell>
+                            <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleEdit(product)
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleDelete(product?.id)
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                          {searchQuery || categoryFilter !== "all" || statusFilter !== "all"
+                            ? "Không tìm thấy sản phẩm kho nào phù hợp" 
+                            : "Không có dữ liệu"}
                         </TableCell>
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                        {searchQuery ? "Không tìm thấy sản phẩm kho nào" : "Không có dữ liệu"}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                    )}
+                  </TableBody>
+                </Table>
+                {/* Pagination Controls */}
+                {paginationMeta && paginationMeta.totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                    <div className="text-sm text-gray-500">
+                      Hiển thị {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, paginationMeta.total)} trong tổng số {paginationMeta.total} sản phẩm
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page === 1 || isLoading}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm">
+                        Trang {page} / {paginationMeta.totalPages}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.min(paginationMeta.totalPages, p + 1))}
+                        disabled={page >= paginationMeta.totalPages || isLoading}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
+
+        {/* Dialog hiển thị danh sách lô hàng */}
+        <Dialog open={isItemsDialogOpen} onOpenChange={setIsItemsDialogOpen}>
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Danh sách lô hàng: {selectedProduct?.name}
+              </DialogTitle>
+            </DialogHeader>
+            {selectedProduct ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <Label className="text-sm text-gray-500">Danh mục</Label>
+                    <div className="mt-1 font-medium">
+                      {selectedProduct.category?.name || "-"}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-500">Tổng số lượng</Label>
+                    <div className="mt-1 font-medium">
+                      {(selectedProduct.validItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0) + 
+                       (selectedProduct.expiredItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0)}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-500">Số lượng còn hạn</Label>
+                    <div className="mt-1">
+                      <Badge variant="default" className="bg-green-500">
+                        {selectedProduct.validItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-500">Số lượng hết hạn</Label>
+                    <div className="mt-1">
+                      <Badge variant="destructive">
+                        {selectedProduct.expiredItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0}
+                      </Badge>
+                    </div>
+                  </div>
+                  {selectedProduct.description && (
+                    <div className="col-span-2">
+                      <Label className="text-sm text-gray-500">Mô tả</Label>
+                      <div className="mt-1">{selectedProduct.description}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tabs để chuyển đổi giữa các chế độ */}
+                <Tabs value={itemsTab} onValueChange={(v) => setItemsTab(v as "all" | "valid" | "expired")}>
+                  <TabsList>
+                    <TabsTrigger value="all">
+                      Tất cả ({((selectedProduct.validItems?.length || 0) + (selectedProduct.expiredItems?.length || 0))})
+                    </TabsTrigger>
+                    <TabsTrigger value="valid">
+                      Còn hạn ({selectedProduct.validItems?.length || 0})
+                    </TabsTrigger>
+                    <TabsTrigger value="expired">
+                      Hết hạn ({selectedProduct.expiredItems?.length || 0})
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* Tab: Tất cả */}
+                  <TabsContent value="all" className="mt-4">
+                    {((selectedProduct.validItems && selectedProduct.validItems.length > 0) || 
+                      (selectedProduct.expiredItems && selectedProduct.expiredItems.length > 0)) ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>STT</TableHead>
+                            <TableHead>Số lượng</TableHead>
+                            <TableHead>Ngày hết hạn</TableHead>
+                            <TableHead>Trạng thái</TableHead>
+                            <TableHead>Mã session</TableHead>
+                            <TableHead>Người nhập</TableHead>
+                            <TableHead>Ngày nhập</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {[
+                            ...(selectedProduct.validItems || []).map(item => ({ ...item, isExpired: false })),
+                            ...(selectedProduct.expiredItems || []).map(item => ({ ...item, isExpired: true }))
+                          ].map((item, index) => {
+                            const daysUntilExpiry = item.expiryDate ? getDaysUntilExpiry(item.expiryDate) : null
+                            return (
+                              <TableRow key={item.id}>
+                                <TableCell>{index + 1}</TableCell>
+                                <TableCell className="font-medium">{item.quantity}</TableCell>
+                                <TableCell>
+                                  {item.expiryDate ? formatDate(item.expiryDate) : "-"}
+                                </TableCell>
+                                <TableCell>
+                                  {item.isExpired ? (
+                                    <Badge variant="destructive">Hết hạn</Badge>
+                                  ) : daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry >= 0 ? (
+                                    <Badge variant="destructive" className="text-xs">
+                                      <AlertTriangle className="h-3 w-3 mr-1" />
+                                      {daysUntilExpiry} ngày
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="default" className="bg-green-500">Còn hạn</Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="font-mono text-xs">
+                                    {item.sessionCode}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>{item.importedBy?.name || "-"}</TableCell>
+                                <TableCell>{item.createdAt ? formatDate(item.createdAt) : "-"}</TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        Không có lô hàng nào
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* Tab: Còn hạn */}
+                  <TabsContent value="valid" className="mt-4">
+                    {selectedProduct.validItems && selectedProduct.validItems.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>STT</TableHead>
+                            <TableHead>Số lượng</TableHead>
+                            <TableHead>Ngày hết hạn</TableHead>
+                            <TableHead>Mã session</TableHead>
+                            <TableHead>Người nhập</TableHead>
+                            <TableHead>Ngày nhập</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedProduct.validItems.map((item, index) => {
+                            const daysUntilExpiry = item.expiryDate ? getDaysUntilExpiry(item.expiryDate) : null
+                            return (
+                              <TableRow key={item.id}>
+                                <TableCell>{index + 1}</TableCell>
+                                <TableCell className="font-medium">{item.quantity}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    {item.expiryDate ? formatDate(item.expiryDate) : "-"}
+                                    {daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry >= 0 && (
+                                      <Badge variant="destructive" className="text-xs">
+                                        <AlertTriangle className="h-3 w-3 mr-1" />
+                                        {daysUntilExpiry} ngày
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="font-mono text-xs">
+                                    {item.sessionCode}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>{item.importedBy?.name || "-"}</TableCell>
+                                <TableCell>{item.createdAt ? formatDate(item.createdAt) : "-"}</TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        Không có lô hàng còn hạn
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* Tab: Hết hạn */}
+                  <TabsContent value="expired" className="mt-4">
+                    {selectedProduct.expiredItems && selectedProduct.expiredItems.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>STT</TableHead>
+                            <TableHead>Số lượng</TableHead>
+                            <TableHead>Ngày hết hạn</TableHead>
+                            <TableHead>Mã session</TableHead>
+                            <TableHead>Người nhập</TableHead>
+                            <TableHead>Ngày nhập</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedProduct.expiredItems.map((item, index) => {
+                            const daysUntilExpiry = item.expiryDate ? getDaysUntilExpiry(item.expiryDate) : null
+                            return (
+                              <TableRow key={item.id}>
+                                <TableCell>{index + 1}</TableCell>
+                                <TableCell className="font-medium">{item.quantity}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    {item.expiryDate ? formatDate(item.expiryDate) : "-"}
+                                    {daysUntilExpiry !== null && daysUntilExpiry < 0 && (
+                                      <Badge variant="destructive">Đã hết hạn</Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="font-mono text-xs">
+                                    {item.sessionCode}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>{item.importedBy?.name || "-"}</TableCell>
+                                <TableCell>{item.createdAt ? formatDate(item.createdAt) : "-"}</TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        Không có lô hàng hết hạn
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                Không tìm thấy thông tin sản phẩm
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Edit Dialog */}
         {editingProduct && (

@@ -99,52 +99,50 @@ export default function CategoriesPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Quản lý Danh mục</h1>
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Tạo danh mục mới
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Tạo danh mục mới</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Tên danh mục <span className="text-red-500">*</span></Label>
-                  <Input
-                    id="name"
-                    className="mt-2"
-                    {...register("name", { required: "Tên danh mục là bắt buộc" })}
-                  />
-                  {errors.name && (
-                    <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>
-                  )}
-                </div>
-                <div>
-                  <Label htmlFor="description">Mô tả</Label>
-                  <Textarea
-                    id="description"
-                    className="mt-2"
-                    {...register("description")}
-                    rows={3}
-                  />
-                </div>
-                <Button type="submit" disabled={createMutation.isPending}>
-                  {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Tạo
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
-
         <Card>
           <CardHeader>
-            <CardTitle>Danh sách danh mục</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Danh sách danh mục</CardTitle>
+              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Tạo danh mục mới
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Tạo danh mục mới</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                    <div>
+                      <Label htmlFor="name">Tên danh mục <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="name"
+                        className="mt-2"
+                        {...register("name", { required: "Tên danh mục là bắt buộc" })}
+                      />
+                      {errors.name && (
+                        <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="description">Mô tả</Label>
+                      <Textarea
+                        id="description"
+                        className="mt-2"
+                        {...register("description")}
+                        rows={3}
+                      />
+                    </div>
+                    <Button type="submit" disabled={createMutation.isPending}>
+                      {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Tạo
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (

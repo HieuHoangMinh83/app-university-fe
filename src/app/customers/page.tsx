@@ -18,8 +18,10 @@ import { Pencil, Loader2, Eye, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 import DashboardLayout from "@/components/dashboard-layout"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 export default function CustomersPage() {
+  const router = useRouter()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
@@ -30,7 +32,7 @@ export default function CustomersPage() {
 
   const { data: clients, isLoading } = useQuery({
     queryKey: ["clients"],
-    queryFn: clientsApi.getAll,
+    queryFn: () => clientsApi.getAll(),
   })
 
   const createMutation = useMutation({
@@ -132,7 +134,8 @@ export default function CustomersPage() {
   }
 
   // Filter clients based on search query
-  const filteredClients = clients?.filter((client) => {
+  const clientsArray = Array.isArray(clients) ? clients : []
+  const filteredClients = clientsArray.filter((client: Client) => {
     if (!searchQuery) return true
     const query = searchQuery.toLowerCase()
     return (
@@ -276,8 +279,12 @@ export default function CustomersPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredClients?.length > 0 ? (
-                    filteredClients?.map((client) => (
-                    <TableRow key={client?.id}>
+                    filteredClients?.map((client: Client) => (
+                    <TableRow 
+                      key={client?.id}
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => router.push(`/customers/${client?.id}`)}
+                    >
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <Avatar className="h-10 w-10">
@@ -286,9 +293,9 @@ export default function CustomersPage() {
                               {client?.name?.charAt?.(0)?.toUpperCase() || "K"}
                             </AvatarFallback>
                           </Avatar>
-                          <Link href={`/customers/${client?.id}`} className="font-medium hover:underline">
+                          <span className="font-medium">
                             {client?.name}
-                          </Link>
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell>{client?.phone}</TableCell>
@@ -303,9 +310,9 @@ export default function CustomersPage() {
                       <TableCell>
                         {client?.createdAt ? new Date(client.createdAt).toLocaleDateString("vi-VN") : "-"}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-2">
-                          <Link href={`/customers/${client?.id}`}>
+                          <Link href={`/customers/${client?.id}`} onClick={(e) => e.stopPropagation()}>
                             <Button variant="ghost" size="icon">
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -313,7 +320,10 @@ export default function CustomersPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleEdit(client)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEdit(client)
+                            }}
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>

@@ -11,6 +11,7 @@ export interface Voucher {
   price: number | null;
   percent: number | null;
   maxPrice: number | null;
+  hasMaxPrice: boolean;
   minApply: number | null;
   quantity: number;
   pointsRequired: number | null;
@@ -44,6 +45,7 @@ export interface CreateVoucherDto {
   price?: number;
   percent?: number;
   maxPrice?: number;
+  hasMaxPrice?: boolean;
   minApply?: number;
   quantity?: number;
   pointsRequired?: number;
@@ -61,6 +63,7 @@ export interface UpdateVoucherDto {
   price?: number;
   percent?: number;
   maxPrice?: number;
+  hasMaxPrice?: boolean;
   minApply?: number;
   quantity?: number;
   pointsRequired?: number;
@@ -114,6 +117,14 @@ export const vouchersApi = {
   // Xóa voucher
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/vouchers/${id}`);
+  },
+
+  // Lấy danh sách voucher có thể đổi (redeemable)
+  getRedeemableList: async (): Promise<Voucher[]> => {
+    console.log(`[API] Calling GET /vouchers/redeemable/list`);
+    const response = await apiClient.get("/vouchers/redeemable/list");
+    console.log(`[API] Response:`, response?.data);
+    return response?.data?.data || response?.data || [];
   },
 };
 
