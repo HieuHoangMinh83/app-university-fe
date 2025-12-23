@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Loader2, ArrowLeft, Package, Trash2, ChevronLeft, ChevronRight, ChevronsUpDown, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
 import DashboardLayout from "@/components/dashboard-layout"
 import Link from "next/link"
@@ -80,6 +81,7 @@ export default function InventoryImportPage() {
   const [productSearchValues, setProductSearchValues] = useState<Record<string, string>>({})
   const [productPopoverOpen, setProductPopoverOpen] = useState<Record<string, boolean>>({})
   const [quantityInputValues, setQuantityInputValues] = useState<Record<string, string>>({})
+  const dropdownRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const addImportItem = () => {
     const newId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -146,6 +148,30 @@ export default function InventoryImportPage() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [])
+
+  // Scroll dropdown vào view khi mở
+  useEffect(() => {
+    Object.keys(productPopoverOpen).forEach((itemId) => {
+      if (productPopoverOpen[itemId]) {
+        const dropdownElement = dropdownRefs.current[itemId]
+        if (dropdownElement) {
+          // Scroll dropdown container vào view với một chút offset
+          setTimeout(() => {
+            dropdownElement.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'nearest',
+              inline: 'nearest'
+            })
+            // Scroll thêm một chút xuống
+            const tableContainer = dropdownElement.closest('.overflow-auto')
+            if (tableContainer) {
+              tableContainer.scrollBy({ top: 120  , behavior: 'smooth' })
+            }
+          }, 100)
+        }
+      }
+    })
+  }, [productPopoverOpen])
 
   // Sync productSearchValues với item.productId khi item thay đổi
   // CHỈ sync khi productId có giá trị và searchValue chưa được set
@@ -245,26 +271,34 @@ export default function InventoryImportPage() {
         return
       }
       
-      // Validate expiryDate
-      if (!item.expiryDate || item.expiryDate.trim() === "") {
-        toast.error(`Vui lòng nhập ngày hết hạn cho sản phẩm #${i + 1}`)
-        return
-      }
+      // Kiểm tra sản phẩm có yêu cầu ngày hết hạn không
+      const product = Array.isArray(inventoryProducts) 
+        ? inventoryProducts.find(p => String(p.id) === String(item.productId))
+        : undefined
+      const hasExpiryDate = product?.hasExpiryDate ?? true // Mặc định là true
+      
+      // Validate expiryDate chỉ khi sản phẩm có yêu cầu hạn sử dụng
+      if (hasExpiryDate) {
+        if (!item.expiryDate || item.expiryDate.trim() === "") {
+          toast.error(`Vui lòng nhập ngày hết hạn cho sản phẩm #${i + 1}`)
+          return
+        }
 
-      // Validate expiryDate format và không được trong quá khứ
-      const expiryDate = new Date(item.expiryDate)
-      if (isNaN(expiryDate.getTime())) {
-        toast.error(`Ngày hết hạn không hợp lệ cho sản phẩm #${i + 1}`)
-        return
-      }
-      
-      expiryDate.setHours(0, 0, 0, 0)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      
-      if (expiryDate < today) {
-        toast.error(`Ngày hết hạn phải sau hoặc bằng ngày hiện tại cho sản phẩm #${i + 1}`)
-        return
+        // Validate expiryDate format và không được trong quá khứ
+        const expiryDate = new Date(item.expiryDate)
+        if (isNaN(expiryDate.getTime())) {
+          toast.error(`Ngày hết hạn không hợp lệ cho sản phẩm #${i + 1}`)
+          return
+        }
+        
+        expiryDate.setHours(0, 0, 0, 0)
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        
+        if (expiryDate < today) {
+          toast.error(`Ngày hết hạn phải sau hoặc bằng ngày hiện tại cho sản phẩm #${i + 1}`)
+          return
+        }
       }
     }
 
@@ -278,14 +312,26 @@ export default function InventoryImportPage() {
     const importData: ImportInventoryDto = {
       sessionDescription: sessionDescription.trim() || "",
       items: importItems.map((item) => {
+        // Kiểm tra sản phẩm có yêu cầu ngày hết hạn không
+        const product = Array.isArray(inventoryProducts) 
+          ? inventoryProducts.find(p => String(p.id) === String(item.productId))
+          : undefined
+        const hasExpiryDate = product?.hasExpiryDate ?? true // Mặc định là true
+        
         // Format expiryDate: chỉ gửi date string YYYY-MM-DD, không có time
         // item.expiryDate đã là format YYYY-MM-DD từ input type="date"
-        return {
+        const itemData: ImportInventoryItemDto = {
           productId: String(item.productId).trim(), // Đảm bảo là string và không có khoảng trắng
           quantity: Math.floor(Number(item.quantity)), // Đảm bảo là integer
-          expiryDate: item.expiryDate, // Date string YYYY-MM-DD
           notes: item.notes?.trim() || undefined,
         }
+        
+        // Chỉ thêm expiryDate nếu sản phẩm có hạn sử dụng và có giá trị
+        if (hasExpiryDate && item.expiryDate) {
+          itemData.expiryDate = item.expiryDate
+        }
+        
+        return itemData
       })
     }
 
@@ -386,23 +432,27 @@ export default function InventoryImportPage() {
                 </div>
               ) : (
                 <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-12">STT</TableHead>
-                        <TableHead>Sản phẩm <span className="text-red-500">*</span></TableHead>
-                        <TableHead className="w-32">Số lượng <span className="text-red-500">*</span></TableHead>
-                        <TableHead className="w-40">Ngày hết hạn <span className="text-red-500">*</span></TableHead>
-                        <TableHead>Ghi chú</TableHead>
-                        <TableHead className="w-20">Hành động</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                  <Table className="min-h-[250px] max-h-[500px]">
+                    <TableHeader className="sticky top-0 bg-white z-10">
+                        <TableRow>
+                          <TableHead className="w-12">STT</TableHead>
+                          <TableHead>Sản phẩm <span className="text-red-500">*</span></TableHead>
+                          <TableHead className="w-32">Số lượng <span className="text-red-500">*</span></TableHead>
+                          <TableHead className="w-40">Ngày hết hạn <span className="text-red-500">*</span></TableHead>
+                          <TableHead>Ghi chú</TableHead>
+                          <TableHead className="w-20">Hành động</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                       {importItems.map((item, index) => (
                         <TableRow key={item.id}>
                           <TableCell className="font-medium">{index + 1}</TableCell>
                           <TableCell>
-                            <div className="relative product-search-dropdown" data-dropdown-item={item.id}>
+                            <div 
+                              ref={(el) => { dropdownRefs.current[item.id] = el }}
+                              className="relative product-search-dropdown" 
+                              data-dropdown-item={item.id}
+                            >
                               <Input
                                 type="text"
                                 placeholder="Chọn sản phẩm trong kho"
@@ -424,9 +474,9 @@ export default function InventoryImportPage() {
                                   // Luôn cập nhật search value để hiển thị
                                   setProductSearchValues(prev => ({ ...prev, [item.id]: searchValue }))
                                   
-                                  // Mở popover khi có text
+                                  // Mở popover khi có text - chỉ mở dropdown này, đóng các dropdown khác
                                   if (searchValue) {
-                                    setProductPopoverOpen(prev => ({ ...prev, [item.id]: true }))
+                                    setProductPopoverOpen({ [item.id]: true })
                                   }
                                   
                                   // CHỈ clear productId nếu user xóa hết text VÀ đang trong quá trình search
@@ -439,7 +489,8 @@ export default function InventoryImportPage() {
                                   }
                                 }}
                                 onFocus={() => {
-                                  setProductPopoverOpen(prev => ({ ...prev, [item.id]: true }))
+                                  // Chỉ mở dropdown này, đóng các dropdown khác
+                                  setProductPopoverOpen({ [item.id]: true })
                                 }}
                                 className="h-9 pr-8"
                               />
@@ -447,7 +498,8 @@ export default function InventoryImportPage() {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setProductPopoverOpen(prev => ({ ...prev, [item.id]: !prev[item.id] }))
+                                  // Chỉ mở dropdown này, đóng các dropdown khác
+                                  setProductPopoverOpen(prev => ({ [item.id]: !prev[item.id] }))
                                 }}
                                 className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 flex items-center justify-center hover:bg-gray-100 rounded z-10"
                               >
@@ -574,13 +626,42 @@ export default function InventoryImportPage() {
                             />
                           </TableCell>
                           <TableCell>
-                            <Input
-                              type="date"
-                              min={new Date().toISOString().slice(0, 10)}
-                              value={item.expiryDate}
-                              onChange={(e) => updateImportItem(item.id, "expiryDate", e.target.value)}
-                              className="h-9"
-                            />
+                            {(() => {
+                              const selectedProduct = Array.isArray(inventoryProducts) 
+                                ? inventoryProducts.find(p => String(p.id) === String(item.productId))
+                                : undefined
+                              const hasExpiryDate = selectedProduct?.hasExpiryDate ?? true // Mặc định là true
+                              const isDisabled = !item.productId || !hasExpiryDate
+                              
+                              return (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="w-full">
+                                        <Input
+                                          type="date"
+                                          min={new Date().toISOString().slice(0, 10)}
+                                          value={item.expiryDate}
+                                          onChange={(e) => updateImportItem(item.id, "expiryDate", e.target.value)}
+                                          disabled={isDisabled}
+                                          className="h-9"
+                                          placeholder="Ngày hết hạn"
+                                        />
+                                      </div>
+                                    </TooltipTrigger>
+                                    {isDisabled && (
+                                      <TooltipContent>
+                                        <p>
+                                          {!item.productId 
+                                            ? "Vui lòng chọn sản phẩm trước" 
+                                            : "Sản phẩm này không có hạn sử dụng"}
+                                        </p>
+                                      </TooltipContent>
+                                    )}
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )
+                            })()}
                           </TableCell>
                           <TableCell>
                             <Input

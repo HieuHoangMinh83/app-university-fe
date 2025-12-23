@@ -72,7 +72,36 @@ export interface GetOrdersParams extends PaginationParams {
 export const ordersApi = {
   // Lấy tất cả orders (Admin only)
   getAll: async (params?: GetOrdersParams): Promise<Order[] | PaginatedResponse<Order>> => {
-    const response = await apiClient.get("/orders", { params });
+    // Chỉ truyền params hợp lệ (loại bỏ undefined/null)
+    const cleanParams: Record<string, any> = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        const value = params[key as keyof GetOrdersParams];
+        if (value !== undefined && value !== null) {
+          cleanParams[key] = value;
+        }
+      });
+    }
+    const response = await apiClient.get("/orders", Object.keys(cleanParams).length > 0 ? { params: cleanParams } : {});
+    
+    // Xử lý response với cấu trúc: { data: { data: [...], pagination: {...} } }
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      const pagination = response.data.data.pagination;
+      if (pagination) {
+        return {
+          data: response.data.data.data,
+          meta: {
+            page: pagination.page,
+            pageSize: pagination.pageSize,
+            total: pagination.total,
+            totalPages: pagination.totalPages,
+          }
+        } as PaginatedResponse<Order>;
+      }
+      // Nếu có data nhưng không có pagination, trả về array
+      return response.data.data.data;
+    }
+    
     // Check if response has pagination structure: { data: { data: [...], meta: {...} } }
     if (response?.data?.data?.data && response?.data?.data?.meta) {
       return response.data.data as PaginatedResponse<Order>;

@@ -39,6 +39,7 @@ export interface InventoryProduct {
     updatedAt: string;
   } | null;
   isActive: boolean;
+  hasExpiryDate: boolean;
   createdById: string;
   updatedById: string | null;
   createdAt: string;
@@ -64,6 +65,7 @@ export interface CreateInventoryProductDto {
   description?: string;
   categoryId: string; // required
   isActive?: boolean;
+  hasExpiryDate?: boolean;
 }
 
 export interface UpdateInventoryProductDto {
@@ -71,6 +73,7 @@ export interface UpdateInventoryProductDto {
   description?: string;
   categoryId?: string;
   isActive?: boolean;
+  hasExpiryDate?: boolean;
 }
 
 export interface GetInventoryProductsParams extends PaginationParams {
@@ -89,7 +92,36 @@ export interface GetInventoryItemsParams extends PaginationParams {
 export const inventoryProductsApi = {
   // Lấy tất cả inventory products
   getAll: async (params?: GetInventoryProductsParams): Promise<InventoryProduct[] | PaginatedResponse<InventoryProduct>> => {
-    const response = await apiClient.get("/inventory-products", { params });
+    // Chỉ truyền params hợp lệ (loại bỏ undefined/null)
+    const cleanParams: Record<string, any> = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        const value = params[key as keyof GetInventoryProductsParams];
+        if (value !== undefined && value !== null) {
+          cleanParams[key] = value;
+        }
+      });
+    }
+    const response = await apiClient.get("/inventory-products", Object.keys(cleanParams).length > 0 ? { params: cleanParams } : {});
+    
+    // Xử lý response với cấu trúc: { data: { data: [...], pagination: {...} } }
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      const pagination = response.data.data.pagination;
+      if (pagination) {
+        return {
+          data: response.data.data.data,
+          meta: {
+            page: pagination.page,
+            pageSize: pagination.pageSize,
+            total: pagination.total,
+            totalPages: pagination.totalPages,
+          }
+        } as PaginatedResponse<InventoryProduct>;
+      }
+      // Nếu có data nhưng không có pagination, trả về array
+      return response.data.data;
+    }
+    
     // Check if response has nested pagination structure: { data: { data: [...], meta: {...} } }
     if (response?.data?.data?.data && Array.isArray(response.data.data.data) && response?.data?.data?.meta) {
       return response.data.data as PaginatedResponse<InventoryProduct>;
@@ -128,7 +160,36 @@ export const inventoryProductsApi = {
 
   // Lấy danh sách lô hàng chi tiết
   getItems: async (params?: GetInventoryItemsParams): Promise<InventoryProduct[] | PaginatedResponse<InventoryProduct>> => {
-    const response = await apiClient.get("/inventory-products/items", { params });
+    // Chỉ truyền params hợp lệ (loại bỏ undefined/null)
+    const cleanParams: Record<string, any> = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        const value = params[key as keyof GetInventoryItemsParams];
+        if (value !== undefined && value !== null) {
+          cleanParams[key] = value;
+        }
+      });
+    }
+    const response = await apiClient.get("/inventory-products/items", Object.keys(cleanParams).length > 0 ? { params: cleanParams } : {});
+    
+    // Xử lý response với cấu trúc: { data: { data: [...], pagination: {...} } }
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      const pagination = response.data.data.pagination;
+      if (pagination) {
+        return {
+          data: response.data.data.data,
+          meta: {
+            page: pagination.page,
+            pageSize: pagination.pageSize,
+            total: pagination.total,
+            totalPages: pagination.totalPages,
+          }
+        } as PaginatedResponse<InventoryProduct>;
+      }
+      // Nếu có data nhưng không có pagination, trả về array
+      return response.data.data.data;
+    }
+    
     // Check if response has nested pagination structure: { data: { data: [...], meta: {...} } }
     if (response?.data?.data?.data && Array.isArray(response.data.data.data) && response?.data?.data?.meta) {
       return response.data.data as PaginatedResponse<InventoryProduct>;

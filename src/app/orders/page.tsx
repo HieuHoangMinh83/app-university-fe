@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ImageUpload } from "@/components/ui/image-upload"
 import { deleteImage } from "@/lib/supabase"
-import { Loader2, Eye, Plus } from "lucide-react"
+import { Loader2, Eye, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 import DashboardLayout from "@/components/dashboard-layout"
 import Link from "next/link"
@@ -23,6 +23,7 @@ import { useForm } from "react-hook-form"
 export default function OrdersPage() {
   const [isCreateClientOpen, setIsCreateClientOpen] = useState(false)
   const [createClientOldImageUrl, setCreateClientOldImageUrl] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
   const queryClient = useQueryClient()
 
   const { data: orders, isLoading } = useQuery({
@@ -105,18 +106,42 @@ export default function OrdersPage() {
     }).format(price)
   }
 
+  // Filter orders based on search query
+  const ordersArray = Array.isArray(orders) ? orders : []
+  const filteredOrders = ordersArray.filter((order: Order) => {
+    if (!searchQuery) return true
+    const query = searchQuery.toLowerCase()
+    return (
+      order?.id?.toLowerCase()?.includes(query) ||
+      order?.client?.name?.toLowerCase()?.includes(query) ||
+      order?.client?.phone?.toLowerCase()?.includes(query)
+    )
+  })
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Quản lý Đơn hàng</h1>
-          <Dialog open={isCreateClientOpen} onOpenChange={handleCreateClientDialogClose}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Tạo khách hàng mới
-              </Button>
-            </DialogTrigger>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Đơn hàng</CardTitle>
+              <div className="flex items-center gap-3">
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Tìm kiếm theo mã đơn, tên hoặc số điện thoại..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Dialog open={isCreateClientOpen} onOpenChange={handleCreateClientDialogClose}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Tạo khách hàng mới
+                    </Button>
+                  </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader className="pb-4 border-b">
                 <DialogTitle className="text-xl font-semibold">Tạo khách hàng mới</DialogTitle>
@@ -204,18 +229,15 @@ export default function OrdersPage() {
               </form>
             </DialogContent>
           </Dialog>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Danh sách đơn hàng</CardTitle>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin" />
               </div>
-            ) : (
+            ) : filteredOrders && filteredOrders.length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -229,8 +251,8 @@ export default function OrdersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {orders?.length > 0 ? (
-                    orders?.map((order) => (
+                  {filteredOrders?.length > 0 ? (
+                    filteredOrders?.map((order) => (
                     <TableRow key={order?.id}>
                       <TableCell className="font-medium">#{order?.id?.slice?.(0, 8)}</TableCell>
                       <TableCell>
@@ -273,12 +295,16 @@ export default function OrdersPage() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                        Không có dữ liệu
+                        {searchQuery ? "Không tìm thấy đơn hàng nào" : "Không có dữ liệu"}
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                {searchQuery ? "Không tìm thấy đơn hàng nào" : "Chưa có đơn hàng nào"}
+              </div>
             )}
           </CardContent>
         </Card>

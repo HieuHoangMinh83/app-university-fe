@@ -82,7 +82,36 @@ export interface GetVouchersParams extends PaginationParams {
 export const vouchersApi = {
   // Lấy tất cả vouchers
   getAll: async (params?: GetVouchersParams): Promise<Voucher[] | PaginatedResponse<Voucher>> => {
-    const response = await apiClient.get("/vouchers", { params });
+    // Chỉ truyền params hợp lệ (loại bỏ undefined/null)
+    const cleanParams: Record<string, any> = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        const value = params[key as keyof GetVouchersParams];
+        if (value !== undefined && value !== null) {
+          cleanParams[key] = value;
+        }
+      });
+    }
+    const response = await apiClient.get("/vouchers", Object.keys(cleanParams).length > 0 ? { params: cleanParams } : {});
+    
+    // Xử lý response với cấu trúc: { data: { data: [...], pagination: {...} } }
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      const pagination = response.data.data.pagination;
+      if (pagination) {
+        return {
+          data: response.data.data.data,
+          meta: {
+            page: pagination.page,
+            pageSize: pagination.pageSize,
+            total: pagination.total,
+            totalPages: pagination.totalPages,
+          }
+        } as PaginatedResponse<Voucher>;
+      }
+      // Nếu có data nhưng không có pagination, trả về array
+      return response.data.data.data;
+    }
+    
     // Check if response has pagination structure: { data: { data: [...], meta: {...} } }
     if (response?.data?.data?.data && response?.data?.data?.meta) {
       return response.data.data as PaginatedResponse<Voucher>;

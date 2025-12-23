@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 import "primereact/resources/themes/lara-light-cyan/theme.css";
 import "primeicons/primeicons.css";
+import "antd/dist/reset.css";
 import type { Metadata } from "next";
 import ReactQueryProvider from "@/lib/providers/ReactQueryProvider";
 

@@ -1,24 +1,34 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { inventoryProductsApi, InventoryProduct } from "@/services/api/inventory-products"
 import { categoriesApi } from "@/services/api/categories"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, AlertTriangle, Plus, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import Link from "next/link"
-import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
+import {
+  Badge,
+  Button,
+  Card,
+  Drawer,
+  Input,
+  Modal,
+  Select,
+  Space,
+  Table,
+  Tabs,
+  Tag,
+  Typography,
+  Skeleton,
+} from "antd"
+import type { ColumnsType } from "antd/es/table"
+import { PlusOutlined, SearchOutlined, FilterOutlined, ExclamationCircleOutlined, EditOutlined } from "@ant-design/icons"
+
+const { Title } = Typography
 
 export default function InventoryPage() {
+  const router = useRouter()
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [isFilterOpen, setIsFilterOpen] = useState(false)
@@ -26,7 +36,7 @@ export default function InventoryPage() {
   const [expiryDate, setExpiryDate] = useState<string>("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   
-  // Temporary filter states for dialog
+  // Temporary filter states for drawer
   const [tempExpiryDate, setTempExpiryDate] = useState<string>("")
   const [tempCategoryFilter, setTempCategoryFilter] = useState<string>("all")
   
@@ -40,13 +50,12 @@ export default function InventoryPage() {
         groupByProduct: true,
         page,
         pageSize,
-        status: activeTab, // Gửi status từ tab hiện tại
+        status: activeTab,
       }
-      // Chỉ gửi 1 parameter ngày thay vì from và to
       if (expiryDate) {
         params.expiryDate = expiryDate
       }
-      if (categoryFilter !== "all") params.productId = categoryFilter // Note: API có thể không hỗ trợ categoryId, cần filter ở client
+      if (categoryFilter !== "all") params.productId = categoryFilter
       return inventoryProductsApi.getItems(params)
     },
   })
@@ -92,10 +101,8 @@ export default function InventoryPage() {
     today.setHours(0, 0, 0, 0)
     
     return products.map(product => {
-      // API trả về inventoryItems đã được sắp xếp theo ngày hết hạn (sớm nhất trước)
       const totalQuantity = product.inventoryItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0
       
-      // Phân loại items thành valid và expired
       const validItems = product.inventoryItems?.filter(item => {
         if (!item.expiryDate) return false
         const expiryDate = new Date(item.expiryDate)
@@ -110,7 +117,6 @@ export default function InventoryPage() {
         return expiryDate < today
       }) || []
       
-      // Nếu có filter theo ngày, lọc items theo ngày đó
       let filteredValidItems = validItems
       let filteredExpiredItems = expiredItems
       
@@ -144,13 +150,11 @@ export default function InventoryPage() {
   }, [products, expiryDate])
 
   // Filter products based on search query and category
-  // Note: Filter by status (tab) đã được xử lý ở API
   const filteredProducts = useMemo(() => {
     if (!productsWithStats) return []
     
     let filtered = productsWithStats
     
-    // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(product => 
@@ -160,7 +164,6 @@ export default function InventoryPage() {
       )
     }
     
-    // Filter by category
     if (categoryFilter !== "all") {
       filtered = filtered.filter(product => product.categoryId === categoryFilter)
     }
@@ -182,344 +185,410 @@ export default function InventoryPage() {
     return diffDays
   }
 
+  // Skeleton data for loading state
+  const skeletonData = useMemo(() => {
+    return Array.from({ length: 10 }, (_, index) => ({
+      id: `skeleton-${index}`,
+      name: '',
+      category: null,
+      totalQuantity: 0,
+      validItems: [],
+      expiredItems: [],
+      allItems: [],
+      isSkeleton: true
+    }))
+  }, [])
+
+  // Initialize temp filters when drawer opens
+  useEffect(() => {
+    if (isFilterOpen) {
+      setTempExpiryDate(expiryDate)
+      setTempCategoryFilter(categoryFilter)
+    }
+  }, [isFilterOpen, expiryDate, categoryFilter])
+
+  const columns: ColumnsType<InventoryProduct & { totalQuantity: number; validItems: any[]; expiredItems: any[]; allItems: any[] }> = useMemo(
+    () => [
+      {
+        title: "STT",
+        key: "stt",
+        width: 60,
+        align: "center",
+        render: (_, record, index) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Input active size="small" style={{ width: 40 }} />
+          }
+          const currentPage = page || 1
+          const currentPageSize = pageSize || 20
+          return (currentPage - 1) * currentPageSize + index + 1
+        },
+      },
+      {
+        title: "Sản phẩm",
+        dataIndex: "name",
+        key: "name",
+        render: (text, record) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Input active size="small" style={{ width: 150 }} />
+          }
+          return <span style={{ fontWeight: 500 }}>{text}</span>
+        },
+      },
+      {
+        title: "Danh mục",
+        key: "category",
+        render: (_, record) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Input active size="small" style={{ width: 100 }} />
+          }
+          return record?.category ? (
+            <Tag>{record.category.name}</Tag>
+          ) : (
+            "-"
+          )
+        },
+      },
+      {
+        title: "Tổng số lượng",
+        key: "totalQuantity",
+        align: "right",
+        render: (_, record) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Input active size="small" style={{ width: 80 }} />
+          }
+          return <span style={{ fontWeight: 600 }}>{record.totalQuantity}</span>
+        },
+      },
+      {
+        title: activeTab === "valid" ? "Số lô còn hạn" : 
+               activeTab === "expired" ? "Số lô hết hạn" : 
+               "Số lô hàng",
+        key: "batches",
+        align: "center",
+        render: (_, record) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Button active size="small" style={{ width: 60 }} />
+          }
+          if (activeTab === "valid") {
+            return (
+              <Badge count={record.validItems?.length || 0} showZero>
+                <Tag color="green">{record.validItems?.length || 0}</Tag>
+              </Badge>
+            )
+          } else if (activeTab === "expired") {
+            return (
+              <Badge count={record.expiredItems?.length || 0} showZero>
+                <Tag color="red">{record.expiredItems?.length || 0}</Tag>
+              </Badge>
+            )
+          } else {
+            return record.allItems?.length || 0
+          }
+        },
+      },
+      {
+        title: "Thao tác",
+        key: "actions",
+        width: 140,
+        fixed: "right",
+        align: "center",
+        render: (_, record) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Button active size="small" style={{ width: 100 }} />
+          }
+          return (
+            <Button
+              type="default"
+              icon={<EditOutlined />}
+              onClick={(e) => {
+                e.stopPropagation()
+                setSelectedProductId(record.id)
+              }}
+            >
+              Xem chi tiết
+            </Button>
+          )
+        },
+      },
+    ],
+    [activeTab, page, pageSize]
+  )
+
+  const detailColumns: ColumnsType<any> = [
+    {
+      title: "STT",
+      key: "stt",
+      width: 60,
+      align: "center",
+      render: (_, __, index) => index + 1,
+    },
+    {
+      title: "Số lượng",
+      dataIndex: "quantity",
+      key: "quantity",
+      align: "right",
+      render: (quantity) => <span style={{ fontWeight: 500 }}>{quantity}</span>,
+    },
+    {
+      title: "Ngày hết hạn",
+      dataIndex: "expiryDate",
+      key: "expiryDate",
+      render: (expiryDate: string) => {
+        if (!expiryDate) return "-"
+        const daysUntilExpiry = getDaysUntilExpiry(expiryDate)
+        return (
+          <Space>
+            <span>{formatDate(expiryDate)}</span>
+            {daysUntilExpiry <= 7 && daysUntilExpiry >= 0 && (
+              <Tag color="orange" icon={<ExclamationCircleOutlined />}>
+                {daysUntilExpiry} ngày
+              </Tag>
+            )}
+            {daysUntilExpiry < 0 && (
+              <Tag color="red">Đã hết hạn</Tag>
+            )}
+          </Space>
+        )
+      },
+    },
+    {
+      title: "Mã session",
+      dataIndex: "sessionCode",
+      key: "sessionCode",
+      render: (sessionCode: string) => (
+        <Tag style={{ fontFamily: "monospace" }}>{sessionCode}</Tag>
+      ),
+    },
+    {
+      title: "Người nhập",
+      key: "importedBy",
+      render: (_, record) => record?.importedBy?.name || "-",
+    },
+    {
+      title: "Ngày nhập",
+      dataIndex: "createdAt",
+      key: "createdAt",
+      render: (createdAt: string) => createdAt ? formatDate(createdAt) : "-",
+    },
+  ]
+
+  const activeFilterCount = [expiryDate, categoryFilter !== "all"].filter(Boolean).length
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <Space style={{ width: "100%", justifyContent: "space-between" }}>
+          <Title level={3} style={{ margin: 0 }}>
+            Quản lý kho
+          </Title>
+          <Link href="/inventory-import">
+            <Button type="primary" icon={<PlusOutlined />}>
+              Nhập kho
+            </Button>
+          </Link>
+        </Space>
+
         <Card>
-          {/* Tabs ở trên cùng của Card */}
-          <div className="pb-0">
-            <Tabs value={activeTab} onValueChange={(v) => {
-              setActiveTab(v as "all" | "valid" | "expired")
-              setPage(1) // Reset về trang đầu khi đổi tab
-            }}>
-              <TabsList>
-                <TabsTrigger value="all">Tất cả</TabsTrigger>
-                <TabsTrigger value="valid">Còn hạn</TabsTrigger>
-                <TabsTrigger value="expired">Hết hạn</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-          <CardHeader>
-            <div className="flex flex-col gap-4">
-              <CardTitle>Danh sách sản phẩm kho</CardTitle>
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Tìm kiếm theo tên, mô tả hoặc danh mục..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Sheet open={isFilterOpen} onOpenChange={(open) => {
-                  setIsFilterOpen(open)
-                  if (open) {
-                    // Initialize temp filters when dialog opens
-                    setTempExpiryDate(expiryDate)
-                    setTempCategoryFilter(categoryFilter)
-                  }
-                }}>
-                  <SheetTrigger asChild>
-                    <Button variant="outline" className="w-full md:w-auto">
-                      <Filter className="mr-2 h-4 w-4" />
-                      Bộ lọc
-                      {(expiryDate || categoryFilter !== "all") && (
-                        <Badge variant="secondary" className="ml-2">
-                          {[expiryDate, categoryFilter !== "all"].filter(Boolean).length}
-                        </Badge>
-                      )}
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="right" className="w-full sm:max-w-md">
-                    <SheetHeader>
-                      <SheetTitle>Bộ lọc</SheetTitle>
-                    </SheetHeader>
-                    <div className="space-y-6 mt-6">
-                      <div>
-                        <Label htmlFor="filter-category" className="text-base font-semibold mb-2 block">Danh mục</Label>
-                        <Select value={tempCategoryFilter} onValueChange={setTempCategoryFilter}>
-                          <SelectTrigger className="mt-2">
-                            <SelectValue placeholder="Chọn danh mục" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">Tất cả danh mục</SelectItem>
-                            {Array.isArray(categories) && categories.map((category) => (
-                              <SelectItem key={category?.id} value={category?.id}>
-                                {category?.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="expiry-date" className="text-base font-semibold mb-2 block">Ngày hết hạn</Label>
-                        <Input
-                          id="expiry-date"
-                          type="date"
-                          value={tempExpiryDate}
-                          onChange={(e) => setTempExpiryDate(e.target.value)}
-                          className="mt-2"
-                        />
-                      </div>
-                      <div className="flex gap-3 pt-4 border-t">
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => {
-                            setTempExpiryDate("")
-                            setTempCategoryFilter("all")
-                            setExpiryDate("")
-                            setCategoryFilter("all")
-                            setPage(1) // Reset về trang đầu khi xóa filter
-                            setIsFilterOpen(false)
-                          }}
-                        >
-                          Xóa bộ lọc
-                        </Button>
-                        <Button
-                          className="flex-1"
-                          onClick={() => {
-                            setExpiryDate(tempExpiryDate)
-                            setCategoryFilter(tempCategoryFilter)
-                            setPage(1) // Reset về trang đầu khi áp dụng filter
-                            setIsFilterOpen(false)
-                          }}
-                        >
-                          Áp dụng
-                        </Button>
-                      </div>
-                    </div>
-                  </SheetContent>
-                </Sheet>
-                <Link href="/inventory-import">
-                  <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Nhập kho
-                  </Button>
-                </Link>
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                      <TableRow>
-                        <TableHead>STT</TableHead>
-                        <TableHead>Sản phẩm</TableHead>
-                        <TableHead>Danh mục</TableHead>
-                        <TableHead>Tổng số lượng</TableHead>
-                        <TableHead>
-                          {activeTab === "valid" ? "Số lô còn hạn" : 
-                           activeTab === "expired" ? "Số lô hết hạn" : 
-                           "Số lô hàng"}
-                        </TableHead>
-                        <TableHead>Thao tác</TableHead>
-                      </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredProducts && filteredProducts.length > 0 ? (
-                      filteredProducts.map((product, index) => {
-                        return (
-                          <TableRow 
-                            key={product.id}
-                            className="cursor-pointer hover:bg-gray-50"
-                            onClick={() => setSelectedProductId(product.id)}
-                          >
-                            <TableCell>{index + 1}</TableCell>
-                            <TableCell className="font-medium">
-                              {product.name}
-                            </TableCell>
-                            <TableCell>
-                              {product.category ? (
-                                <Badge variant="outline">{product.category.name}</Badge>
-                              ) : (
-                                "-"
-                              )}
-                            </TableCell>
-                            <TableCell className="font-semibold">{product.totalQuantity}</TableCell>
-                            <TableCell>
-                              {activeTab === "valid" ? (
-                                <Badge variant="default" className="bg-green-500">
-                                  {product.validItems?.length || 0}
-                                </Badge>
-                              ) : activeTab === "expired" ? (
-                                <Badge variant="destructive">
-                                  {product.expiredItems?.length || 0}
-                                </Badge>
-                              ) : (
-                                product.allItems?.length || 0
-                              )}
-                            </TableCell>
-                            <TableCell onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setSelectedProductId(product.id)}
-                              >
-                                Xem chi tiết
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                          {searchQuery || expiryDate || categoryFilter !== "all"
-                            ? "Không tìm thấy sản phẩm nào phù hợp" 
-                            : "Không có sản phẩm nào"}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-                {/* Pagination Controls */}
-                {paginationMeta && paginationMeta.totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                    <div className="text-sm text-gray-500">
-                      Hiển thị {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, paginationMeta.total)} trong tổng số {paginationMeta.total} sản phẩm
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
-                        disabled={page === 1 || isLoading}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <span className="text-sm">
-                        Trang {page} / {paginationMeta.totalPages}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage(p => Math.min(paginationMeta.totalPages, p + 1))}
-                        disabled={page >= paginationMeta.totalPages || isLoading}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <Tabs
+              activeKey={activeTab}
+              onChange={(key) => {
+                setActiveTab(key as "all" | "valid" | "expired")
+                setPage(1)
+              }}
+              items={[
+                { key: "all", label: "Tất cả" },
+                { key: "valid", label: "Còn hạn" },
+                { key: "expired", label: "Hết hạn" },
+              ]}
+            />
+
+            <Space style={{ width: "100%", flexWrap: "wrap" }} size={[12, 12]}>
+              <Input
+                allowClear
+                prefix={<SearchOutlined />}
+                placeholder="Tìm kiếm theo tên, mô tả hoặc danh mục..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ minWidth: 240, flex: 1 }}
+              />
+              <Button
+                icon={<FilterOutlined />}
+                onClick={() => setIsFilterOpen(true)}
+              >
+                Bộ lọc
+                {activeFilterCount > 0 && (
+                  <Badge count={activeFilterCount} style={{ marginLeft: 8 }} />
                 )}
-              </>
-            )}
-          </CardContent>
+              </Button>
+            </Space>
+
+            <Table
+              columns={columns}
+              dataSource={isLoading ? (skeletonData as any) : (filteredProducts || [])}
+              loading={false}
+              rowKey={(record) => (record as any).isSkeleton ? (record as any).id : (record?.id || `inventory-${Math.random()}`)}
+              scroll={{ x: "max-content", y: 550 }}
+              onRow={(record) => ({
+                onClick: (e) => {
+                  const target = e.target as HTMLElement
+                  if (
+                    target.closest('button') ||
+                    target.closest('.ant-popover') ||
+                    target.closest('a') ||
+                    (record as any).isSkeleton
+                  ) {
+                    return
+                  }
+                  setSelectedProductId(record.id)
+                },
+                style: { cursor: 'pointer' }
+              })}
+              pagination={
+                !isLoading && paginationMeta?.totalPages
+                  ? {
+                      current: page,
+                      total: paginationMeta.total,
+                      pageSize: pageSize,
+                      showSizeChanger: false,
+                      showTotal: (total, range) =>
+                        `Hiển thị ${range[0]}-${range[1]} / ${total} sản phẩm`,
+                      onChange: (newPage) => setPage(newPage),
+                    }
+                  : false
+              }
+              locale={{
+                emptyText:
+                  searchQuery || expiryDate || categoryFilter !== "all"
+                    ? "Không tìm thấy sản phẩm nào phù hợp"
+                    : "Không có sản phẩm nào",
+              }}
+            />
+          </Space>
         </Card>
 
-            {/* Dialog chi tiết sản phẩm */}
-            <Dialog open={!!selectedProductId} onOpenChange={(open) => !open && setSelectedProductId(null)}>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>
-                    Chi tiết: {selectedProduct?.name}
-                  </DialogTitle>
-                </DialogHeader>
-                {selectedProduct ? (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <Label className="text-sm text-gray-500">Danh mục</Label>
-                        <div className="mt-1 font-medium">
-                          {selectedProduct.category?.name || "-"}
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-sm text-gray-500">Tổng số lượng</Label>
-                        <div className="mt-1 font-medium">
-                          {selectedProduct.inventoryItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0}
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-sm text-gray-500">Số lô hàng</Label>
-                        <div className="mt-1 font-medium">
-                          {selectedProduct.inventoryItems?.length || 0}
-                        </div>
-                      </div>
-                      {selectedProduct.description && (
-                        <div className="col-span-2">
-                          <Label className="text-sm text-gray-500">Mô tả</Label>
-                          <div className="mt-1">{selectedProduct.description}</div>
-                        </div>
-                      )}
-                    </div>
+        {/* Drawer cho bộ lọc */}
+        <Drawer
+          title="Bộ lọc"
+          placement="right"
+          onClose={() => setIsFilterOpen(false)}
+          open={isFilterOpen}
+          width={400}
+        >
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontWeight: 500 }}>
+                Danh mục
+              </label>
+              <Select
+                value={tempCategoryFilter}
+                onChange={setTempCategoryFilter}
+                style={{ width: "100%" }}
+                options={[
+                  { label: "Tất cả danh mục", value: "all" },
+                  ...(categories || []).map((category) => ({
+                    label: category?.name,
+                    value: category?.id,
+                  })),
+                ]}
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontWeight: 500 }}>
+                Mốc thời gian
+              </label>
+              <Input
+                type="date"
+                value={tempExpiryDate}
+                onChange={(e) => setTempExpiryDate(e.target.value)}
+                style={{ width: "100%" }}
+              />
+            </div>
+            <Space style={{ width: "100%", justifyContent: "flex-end", marginTop: 24 }}>
+              <Button
+                onClick={() => {
+                  setTempExpiryDate("")
+                  setTempCategoryFilter("all")
+                  setExpiryDate("")
+                  setCategoryFilter("all")
+                  setPage(1)
+                }}
+              >
+                Xóa bộ lọc
+              </Button>
+              <Button
+                type="primary"
+                onClick={() => {
+                  setExpiryDate(tempExpiryDate)
+                  setCategoryFilter(tempCategoryFilter)
+                  setPage(1)
+                  setIsFilterOpen(false)
+                }}
+              >
+                Áp dụng
+              </Button>
+            </Space>
+          </Space>
+        </Drawer>
 
+        {/* Modal chi tiết sản phẩm */}
+        <Modal
+          title={`Chi tiết: ${selectedProduct?.name || ""}`}
+          open={!!selectedProductId}
+          onCancel={() => setSelectedProductId(null)}
+          footer={null}
+          width={900}
+          destroyOnClose
+        >
+          {selectedProduct ? (
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+              <Card size="small">
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                     <div>
-                      <h3 className="font-semibold mb-3">Danh sách lô hàng</h3>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>STT</TableHead>
-                            <TableHead>Số lượng</TableHead>
-                            <TableHead>Ngày hết hạn</TableHead>
-                            <TableHead>Mã session</TableHead>
-                            <TableHead>Người nhập</TableHead>
-                            <TableHead>Ngày nhập</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {selectedProduct.inventoryItems && selectedProduct.inventoryItems.length > 0 ? (
-                            selectedProduct.inventoryItems.map((item, index) => {
-                              const daysUntilExpiry = item.expiryDate ? getDaysUntilExpiry(item.expiryDate) : null
-                              return (
-                                <TableRow key={item.id}>
-                                  <TableCell>{index + 1}</TableCell>
-                                  <TableCell className="font-medium">{item.quantity}</TableCell>
-                                  <TableCell>
-                                    <div className="flex items-center gap-2">
-                                      {item.expiryDate ? formatDate(item.expiryDate) : "-"}
-                                      {daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry >= 0 && (
-                                        <Badge variant="destructive" className="text-xs">
-                                          <AlertTriangle className="h-3 w-3 mr-1" />
-                                          {daysUntilExpiry} ngày
-                                        </Badge>
-                                      )}
-                                      {daysUntilExpiry !== null && daysUntilExpiry < 0 && (
-                                        <Badge variant="destructive">Đã hết hạn</Badge>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline" className="font-mono text-xs">
-                                      {item.sessionCode}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>{item.importedBy?.name || "-"}</TableCell>
-                                  <TableCell>{item.createdAt ? formatDate(item.createdAt) : "-"}</TableCell>
-                                </TableRow>
-                              )
-                            })
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={6} className="text-center py-4 text-gray-500">
-                                Không có lô hàng nào
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
+                      <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 4 }}>Danh mục</div>
+                      <div style={{ fontWeight: 500 }}>{selectedProduct.category?.name || "-"}</div>
                     </div>
+                    <div>
+                      <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 4 }}>Tổng số lượng</div>
+                      <div style={{ fontWeight: 500 }}>
+                        {selectedProduct.inventoryItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 4 }}>Số lô hàng</div>
+                      <div style={{ fontWeight: 500 }}>{selectedProduct.inventoryItems?.length || 0}</div>
+                    </div>
+                    {selectedProduct.description && (
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 4 }}>Mô tả</div>
+                        <div>{selectedProduct.description}</div>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    Không tìm thấy thông tin sản phẩm
-                  </div>
-                )}
-              </DialogContent>
-        </Dialog>
-      </div>
+                </Space>
+              </Card>
+
+              <div>
+                <Title level={5} style={{ marginBottom: 12 }}>
+                  Danh sách lô hàng
+                </Title>
+                <Table
+                  columns={detailColumns}
+                  dataSource={selectedProduct.inventoryItems || []}
+                  pagination={false}
+                  rowKey="id"
+                  size="small"
+                />
+              </div>
+            </Space>
+          ) : (
+            <div style={{ textAlign: "center", padding: 32, color: "#6b7280" }}>
+              Không tìm thấy thông tin sản phẩm
+            </div>
+          )}
+        </Modal>
+      </Space>
     </DashboardLayout>
   )
 }

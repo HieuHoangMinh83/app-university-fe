@@ -72,14 +72,18 @@ export default function CreateProductPage() {
       return
     }
 
-    // Validate combos
-    if (!data?.combos || data?.combos?.length === 0) {
+    // Validate combos nếu có
+    if (data?.combos && data?.combos?.length === 0) {
       toast.error("Vui lòng thêm ít nhất 1 combo")
       return
     }
 
     // Remove quantity from product data (only combos have quantity)
     const { quantity, ...productData } = data
+    // Không truyền combos nếu không có
+    if (!productData.combos || productData.combos.length === 0) {
+      delete productData.combos
+    }
     createMutation.mutate(productData)
   }
 

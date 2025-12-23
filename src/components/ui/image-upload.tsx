@@ -119,7 +119,7 @@ export function ImageUpload({ value, onChange, folder = "avatars", disabled, onD
           accept="image/*"
           onChange={handleFileSelect}
           disabled={disabled || uploading}
-          className="hidden"
+          style={{ display: "none" }}
           id="image-upload"
         />
         <div className="flex gap-2">

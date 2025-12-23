@@ -64,7 +64,36 @@ export const clientsApi = {
   // Lấy tất cả clients
   getAll: async (params?: PaginationParams): Promise<Client[] | PaginatedResponse<Client>> => {
     try {
-      const response = await apiClient.get("/clients", { params });
+      // Chỉ truyền params hợp lệ (loại bỏ undefined/null)
+      const cleanParams: Record<string, any> = {};
+      if (params) {
+        Object.keys(params).forEach(key => {
+          const value = params[key as keyof PaginationParams];
+          if (value !== undefined && value !== null) {
+            cleanParams[key] = value;
+          }
+        });
+      }
+      const response = await apiClient.get("/clients", Object.keys(cleanParams).length > 0 ? { params: cleanParams } : {});
+      
+      // Xử lý response với cấu trúc: { data: { data: [...], pagination: {...} } }
+      if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+        const pagination = response.data.data.pagination;
+        if (pagination) {
+          return {
+            data: response.data.data.data,
+            meta: {
+              page: pagination.page,
+              pageSize: pagination.pageSize,
+              total: pagination.total,
+              totalPages: pagination.totalPages,
+            }
+          } as PaginatedResponse<Client>;
+        }
+        // Nếu có data nhưng không có pagination, trả về array
+        return response.data.data.data;
+      }
+      
       // Check if response has pagination structure: { data: { data: [...], meta: {...} } }
       if (response?.data?.data?.data && response?.data?.data?.meta) {
         return response.data.data as PaginatedResponse<Client>;

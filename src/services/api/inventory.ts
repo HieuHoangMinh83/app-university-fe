@@ -33,7 +33,7 @@ export interface ProductInventory {
 export interface ImportInventoryItemDto {
   productId: string;
   quantity: number;
-  expiryDate: string;
+  expiryDate?: string;
   notes?: string;
 }
 

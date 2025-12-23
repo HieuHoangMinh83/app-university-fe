@@ -1,93 +1,146 @@
 "use client"
 
-import { useState, useRef, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { productsApi, Product, CreateProductDto } from "@/services/api/products"
 import { categoriesApi } from "@/services/api/categories"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
-import { Badge } from "@/components/ui/badge"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ImageUpload } from "@/components/ui/image-upload"
-import { useForm } from "react-hook-form"
-import { useRouter } from "next/navigation"
-import { Plus, Pencil, Trash2, Loader2, Package, Search, ChevronDown } from "lucide-react"
-import { toast } from "sonner"
 import DashboardLayout from "@/components/dashboard-layout"
-import Link from "next/link"
-import { deleteImage, uploadImage } from "@/lib/supabase"
+import { useRouter, useSearchParams } from "next/navigation"
+import { toast } from "sonner"
+import {
+  Badge,
+  Button,
+  Card,
+  Form,
+  Input,
+  Modal,
+  Popover,
+  Select,
+  Skeleton,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from "antd"
+import type { ColumnsType } from "antd/es/table"
+import { DownOutlined, EditOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons"
+import { ImageUpload } from "@/components/ui/image-upload"
+import { deleteImage } from "@/lib/supabase"
+
+const { Title } = Typography
+
+interface CreateProductSimpleDto {
+  name: string
+  description?: string
+  categoryId?: string
+  isActive?: boolean
+  spinCount?: number
+  image?: string
+}
+
+const formatCurrency = (value?: number) => {
+  if (!value) return "0"
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+  }).format(value)
+}
+
+const getTotalItems = (product?: Product) => {
+  return (
+    product?.combos?.reduce((sum, combo) => {
+      return sum + (combo?.items?.reduce((itemSum, item) => itemSum + item.quantity, 0) || 0)
+    }, 0) || 0
+  )
+}
 
 export default function ProductsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const queryClient = useQueryClient()
+
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<string>("all")
-  const queryClient = useQueryClient()
-
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(20)
   const [createProductImageUrl, setCreateProductImageUrl] = useState<string | null>(null)
+  const [createForm] = Form.useForm<CreateProductSimpleDto>()
 
-  interface CreateProductSimpleDto {
-    name: string
-    description?: string
-    categoryId?: string
-    isActive?: boolean
-    spinCount?: number
-    image?: string
-  }
+  useEffect(() => {
+    const searchParam = searchParams.get("search")
+    if (searchParam) {
+      setSearchQuery(searchParam)
+    }
+  }, [searchParams])
 
-  const { register: registerCreate, handleSubmit: handleSubmitCreate, watch: watchCreate, setValue: setValueCreate, reset: resetCreateForm, formState: { errors: createErrors } } = useForm<CreateProductSimpleDto>({
-    defaultValues: {
-      isActive: true,
+  const { data: productsResponse, isLoading } = useQuery({
+    queryKey: ["products", page, pageSize, categoryFilter, statusFilter],
+    queryFn: () => {
+      const params: { page?: number; pageSize?: number; categoryId?: string; status?: string } = {
+        page,
+        pageSize,
+      }
+      if (categoryFilter !== "all") {
+        params.categoryId = categoryFilter
+      }
+      if (statusFilter !== "all") {
+        params.status = statusFilter
+      }
+      return productsApi.getAll(params)
     },
-    mode: "onChange"
   })
+
+  const { products, paginationMeta } = useMemo(() => {
+    if (!productsResponse) return { products: undefined, paginationMeta: undefined }
+    if (Array.isArray(productsResponse)) return { products: productsResponse, paginationMeta: undefined }
+    if ("data" in productsResponse && Array.isArray(productsResponse.data)) {
+      return {
+        products: productsResponse.data,
+        paginationMeta: "meta" in productsResponse ? productsResponse.meta : undefined,
+      }
+    }
+    return { products: [], paginationMeta: undefined }
+  }, [productsResponse])
+
+  const { data: categoriesResponse } = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => categoriesApi.getAll(),
+  })
+
+  const categories = useMemo(() => {
+    if (!categoriesResponse) return undefined
+    if (Array.isArray(categoriesResponse)) return categoriesResponse
+    if ("data" in categoriesResponse && Array.isArray(categoriesResponse.data)) {
+      return categoriesResponse.data
+    }
+    return []
+  }, [categoriesResponse])
 
   const createMutation = useMutation({
     mutationFn: async (data: CreateProductSimpleDto) => {
-      // Tạo sản phẩm với một combo tạm thời (API yêu cầu ít nhất 1 combo)
-      // Combo này sẽ được xóa và thay thế khi user thêm combo thực sự từ trang detail
-      // Tạm thời tạo combo với 1 item giả để đáp ứng yêu cầu API
       const productData: CreateProductDto = {
         ...data,
         categoryId: data.categoryId || "",
-        combos: [{
-          name: "Combo tạm thời - Vui lòng cập nhật",
-          price: 0,
-          isActive: false,
-          items: [] // API có thể reject nếu items rỗng, nhưng để user thêm combo sau
-        }]
       }
       return productsApi.create(productData)
     },
     onSuccess: (product) => {
       queryClient.invalidateQueries({ queryKey: ["products"] })
       setIsCreateOpen(false)
-      resetCreateForm({
-        isActive: true,
-      })
-      // Xóa ảnh đã upload nếu tạo thành công
+      createForm.resetFields()
       if (createProductImageUrl) {
         deleteImage(createProductImageUrl)
       }
       setCreateProductImageUrl(null)
       toast.success("Tạo sản phẩm thành công. Vui lòng thêm combo.")
-      // Redirect đến trang detail để thêm combo với query param để tự động mở dialog
       if (product?.id) {
         router.push(`/products/${product.id}?addCombo=true`)
       }
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.message || "Tạo sản phẩm thất bại")
-      // Xóa ảnh đã upload nếu tạo thất bại
       if (createProductImageUrl) {
         deleteImage(createProductImageUrl)
         setCreateProductImageUrl(null)
@@ -95,460 +148,414 @@ export default function ProductsPage() {
     },
   })
 
-  const onSubmitCreate = (data: CreateProductSimpleDto) => {
-    // Validate category
-    if (!data?.categoryId) {
-      toast.error("Vui lòng chọn danh mục")
-      return
-    }
 
-    createMutation.mutate(data)
-  }
-
-  const { data: products, isLoading } = useQuery({
-    queryKey: ["products"],
-    queryFn: productsApi.getAll,
-  })
-
-  const { data: categories } = useQuery({
-    queryKey: ["categories"],
-    queryFn: categoriesApi.getAll,
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: productsApi.delete,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["products"] })
-      toast.success("Xóa sản phẩm thành công")
-    },
-    onError: (error: any) => {
-      toast.error(error?.response?.data?.message || "Xóa sản phẩm thất bại")
-    },
-  })
-
-  const handleDelete = (id: string) => {
-    if (confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) {
-      deleteMutation.mutate(id)
-    }
-  }
-
-  // Filter products based on search query, category, and status
   const filteredProducts = useMemo(() => {
-    if (!Array.isArray(products)) return []
-    
-    return products.filter((product) => {
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase()
-        const matchesSearch =
+    if (!products) return []
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      return products.filter((product) => {
+        return (
           product?.name?.toLowerCase()?.includes(query) ||
           product?.description?.toLowerCase()?.includes(query) ||
           product?.category?.name?.toLowerCase()?.includes(query)
-        if (!matchesSearch) return false
-      }
+        )
+      })
+    }
+    return products
+  }, [products, searchQuery])
 
-      // Category filter
-      if (categoryFilter !== "all") {
-        if (product?.categoryId !== categoryFilter) return false
-      }
+  // Skeleton data for loading state
+  const skeletonData = useMemo(() => {
+    return Array.from({ length: 10 }, (_, index) => ({
+      id: `skeleton-${index}`,
+      name: '',
+      category: null,
+      combos: [],
+      isActive: false,
+      createdAt: '',
+      isSkeleton: true
+    }))
+  }, [])
 
-      // Status filter
-      if (statusFilter !== "all") {
-        if (statusFilter === "active" && !product?.isActive) return false
-        if (statusFilter === "inactive" && product?.isActive) return false
-      }
+  const handleCreateFinish = (values: CreateProductSimpleDto) => {
+    const image = createForm.getFieldValue("image") as string | undefined
+    const payload: CreateProductSimpleDto = {
+      ...values,
+      image,
+      isActive: true, // mặc định kích hoạt
+    }
+    if (!values?.categoryId) {
+      toast.error("Vui lòng chọn danh mục")
+      return
+    }
+    createMutation.mutate(payload)
+  }
 
-      return true
-    })
-  }, [products, searchQuery, categoryFilter, statusFilter])
+  const handleCreateCancel = () => {
+    setIsCreateOpen(false)
+    createForm.resetFields()
+    if (createProductImageUrl) {
+                          deleteImage(createProductImageUrl)
+                        }
+    setCreateProductImageUrl(null)
+  }
+
+  const columns: ColumnsType<Product> = useMemo(
+    () => [
+      {
+        title: "Tên sản phẩm",
+        dataIndex: "name",
+        key: "name",
+        render: (text, record) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Input active size="small" style={{ width: 150 }} />
+          }
+          return (
+            <Button
+              type="link"
+              onClick={(e) => {
+                e.stopPropagation()
+                router.push(`/products/${record?.id}`)
+              }}
+              style={{ padding: 0 }}
+            >
+              {text}
+            </Button>
+          )
+        },
+      },
+      {
+        title: "Danh mục",
+        dataIndex: "category",
+        key: "category",
+        render: (_, record) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Input active size="small" style={{ width: 100 }} />
+          }
+          return record?.category?.name || "-"
+        },
+      },
+      {
+        title: "Tổng sản phẩm",
+        key: "totalItems",
+        render: (_, record) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Input active size="small" style={{ width: 60 }} />
+          }
+          return getTotalItems(record)
+        },
+      },
+      {
+        title: "Combo",
+        key: "combo",
+        render: (_, record) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Button active size="small" style={{ width: 80 }} />
+          }
+          const activeCombos = record?.combos?.filter((combo) => combo?.isActive) || []
+          if (!activeCombos.length) return <span style={{ color: "#9ca3af" }}>0 combo</span>
+
+          return (
+            <Popover
+              placement="bottomLeft"
+              content={
+                <div style={{ maxHeight: 420, overflowY: "auto" }}>
+                  <Space direction="vertical" style={{ width: "100%" }}>
+                    {activeCombos.map((combo) => (
+                      <Card
+                        key={combo?.id}
+                        size="small"
+                        style={{ borderColor: "#e5e7eb" }}
+                        bodyStyle={{ padding: 12 }}
+                      >
+                        <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                          <span style={{ fontWeight: 600 }}>{combo?.name}</span>
+                          {combo?.isPromotionActive && <Badge color="red" text="Khuyến mãi" />}
+                        </Space>
+                        <div style={{ marginTop: 6, fontWeight: 600, color: combo?.isPromotionActive ? "#dc2626" : "#111827" }}>
+                          {combo?.promotionalPrice && combo?.isPromotionActive ? (
+                            <Space>
+                              <span style={{ textDecoration: "line-through", color: "#6b7280", fontWeight: 500 }}>
+                                {formatCurrency(combo?.price)}
+                              </span>
+                              <span>{formatCurrency(combo?.promotionalPrice)}</span>
+                            </Space>
+                          ) : (
+                            formatCurrency(combo?.price)
+                          )}
+                        </div>
+                        {combo?.items && combo.items.length > 0 && (
+                          <div style={{ marginTop: 8, fontSize: 12, color: "#374151" }}>
+                            {combo.items.map((item, idx) => (
+                              <div key={`${combo?.id}-${idx}`} style={{ display: "flex", gap: 6 }}>
+                                <span style={{ color: item.isGift ? "#16a34a" : "#2563eb" }}>•</span>
+                                <span style={{ flex: 1 }}>{item.inventoryProduct?.name}</span>
+                                <span>x{item.quantity}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {(combo?.promotionStart || combo?.promotionEnd) && (
+                          <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280" }}>
+                            {combo?.promotionStart && (
+                              <div>Bắt đầu: {new Date(combo.promotionStart).toLocaleDateString("vi-VN")}</div>
+                            )}
+                            {combo?.promotionEnd && (
+                              <div>Kết thúc: {new Date(combo.promotionEnd).toLocaleDateString("vi-VN")}</div>
+                            )}
+                          </div>
+                        )}
+                      </Card>
+                    ))}
+                  </Space>
+                </div>
+              }
+              trigger="click"
+            >
+              <Button
+                size="small"
+                onClick={(e) => e.stopPropagation()}
+                icon={<DownOutlined style={{ fontSize: 12 }} />}
+              >
+                {activeCombos.length} combo
+              </Button>
+            </Popover>
+          )
+        },
+      },
+      {
+        title: "Trạng thái",
+        dataIndex: "isActive",
+        key: "isActive",
+        render: (isActive: boolean, record) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Button active size="small" style={{ width: 100 }} />
+          }
+          return <Tag color={isActive ? "green" : "default"}>{isActive ? "Hoạt động" : "Không hoạt động"}</Tag>
+        },
+      },
+      {
+        title: "Ngày tạo",
+        dataIndex: "createdAt",
+        key: "createdAt",
+        render: (createdAt: string | undefined, record: Product) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Input active size="small" style={{ width: 80 }} />
+          }
+          return createdAt ? new Date(createdAt).toLocaleDateString("vi-VN") : "-"
+        },
+      },
+      {
+        title: "Thao tác",
+        key: "actions",
+        fixed: "right",
+        width: 140,
+        align: "center",
+        render: (_, record) => {
+          if ((record as any).isSkeleton) {
+            return <Skeleton.Button active size="small" style={{ width: 100 }} />
+          }
+          return (
+            <Button
+              type="default"
+              icon={<EditOutlined />}
+              style={{ minWidth: 100, display: "inline-flex", justifyContent: "center" }}
+              onClick={(e) => {
+                e.stopPropagation()
+                router.push(`/products/${record?.id}`)
+              }}
+            >
+              Sửa
+            </Button>
+          )
+        },
+      },
+    ],
+    [router]
+  )
+
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Quản lý Sản phẩm</h1>
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Tạo sản phẩm mới
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="text-xl font-semibold">Tạo sản phẩm mới</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmitCreate(onSubmitCreate)} className="space-y-6">
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-sm font-medium">Ảnh sản phẩm</Label>
-                    <ImageUpload
-                      value={watchCreate("image") || ""}
-                      onChange={(url) => {
-                        if (createProductImageUrl && createProductImageUrl !== url) {
-                          deleteImage(createProductImageUrl)
-                        }
-                        setValueCreate("image", url)
-                        setCreateProductImageUrl(url)
-                      }}
-                      folder="product-images"
-                      disabled={createMutation.isPending}
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="create-name">Tên sản phẩm <span className="text-red-500">*</span></Label>
-                    <Input
-                      id="create-name"
-                      className="mt-1.5"
-                      {...registerCreate("name", { required: "Tên sản phẩm là bắt buộc" })}
-                      placeholder="Nhập tên sản phẩm"
-                    />
-                    {createErrors.name && (
-                      <p className="text-sm text-red-500 mt-1">{createErrors.name.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="create-description">Mô tả</Label>
-                    <Textarea
-                      id="create-description"
-                      className="mt-1.5"
-                      {...registerCreate("description")}
-                      rows={3}
-                      placeholder="Mô tả sản phẩm"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="create-categoryId">Danh mục <span className="text-red-500">*</span></Label>
-                    <Select
-                      onValueChange={(value) => setValueCreate("categoryId", value)}
-                    >
-                      <SelectTrigger className="mt-1.5">
-                        <SelectValue placeholder="Chọn danh mục" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories?.map?.((category) => (
-                          <SelectItem key={category?.id} value={category?.id}>
-                            {category?.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {createErrors.categoryId && (
-                      <p className="text-sm text-red-500 mt-1">{createErrors.categoryId.message}</p>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      checked={watchCreate("isActive")}
-                      onCheckedChange={(checked) => setValueCreate("isActive", checked)}
-                    />
-                    <Label>Kích hoạt sản phẩm</Label>
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-800">
-                    <strong>Lưu ý:</strong> Sau khi tạo sản phẩm, bạn sẽ được chuyển đến trang chi tiết để thêm combo và sản phẩm trong kho.
-                  </p>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      // Xóa ảnh đã upload khi hủy
-                      if (createProductImageUrl) {
-                        deleteImage(createProductImageUrl)
-                      }
-                      setIsCreateOpen(false)
-                      resetCreateForm({
-                        isActive: true,
-                      })
-                      setCreateProductImageUrl(null)
-                    }}
-                    disabled={createMutation.isPending}
-                  >
-                    Hủy
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <Space style={{ width: "100%", justifyContent: "space-between" }}>
+          <Title level={3} style={{ margin: 0 }}>
+            Quản lý Sản phẩm
+          </Title>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsCreateOpen(true)}>
+            Tạo sản phẩm mới
                   </Button>
-                  <Button type="submit" disabled={createMutation.isPending}>
-                    {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Tạo sản phẩm
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
+        </Space>
 
         <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-4">
-              <CardTitle>Danh sách sản phẩm</CardTitle>
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <Space
+              style={{ width: "100%", flexWrap: "wrap" }}
+              size={[12, 12]}
+            >
                   <Input
+                allowClear
+                prefix={<SearchOutlined />}
                     placeholder="Tìm kiếm theo tên, mô tả hoặc danh mục..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                style={{ minWidth: 240, flex: 1 }}
                   />
-                </div>
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger className="w-full md:w-[200px]">
-                    <SelectValue placeholder="Tất cả danh mục" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả danh mục</SelectItem>
-                    {categories?.map?.((category) => (
-                      <SelectItem key={category?.id} value={category?.id}>
-                        {category?.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-full md:w-[180px]">
-                    <SelectValue placeholder="Trạng thái" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                    <SelectItem value="active">Hoạt động</SelectItem>
-                    <SelectItem value="inactive">Không hoạt động</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tên sản phẩm</TableHead>
-                    <TableHead>Danh mục</TableHead>
-                    <TableHead>Tổng sản phẩm</TableHead>
-                    <TableHead>Combo</TableHead>
-                    <TableHead>Trạng thái</TableHead>
-                    <TableHead>Ngày tạo</TableHead>
-                    <TableHead className="text-right">Thao tác</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProducts && filteredProducts.length > 0 ? (
-                    filteredProducts?.map((product) => (
-                    <TableRow key={product?.id}>
-                      <TableCell className="font-medium">
-                        <Link href={`/products/${product?.id}`} className="hover:underline">
-                          {product?.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{product?.category?.name || "-"}</TableCell>
-                      <TableCell>
-                        {(() => {
-                          const totalItems = product?.combos?.reduce((sum, combo) => {
-                            return sum + (combo?.items?.reduce((itemSum, item) => itemSum + item.quantity, 0) || 0)
-                          }, 0) || 0
-                          return totalItems
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        {(() => {
-                          const activeCombos = product?.combos?.filter((combo) => combo?.isActive) || []
-                          return activeCombos.length > 0 ? (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-7 text-xs">
-                                  {activeCombos.length} combo
-                                  <ChevronDown className="ml-1 h-3 w-3" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-96" align="start">
-                                <div className="space-y-3">
-                                  <div className="flex items-center justify-between pb-2 border-b">
-                                    <h4 className="font-semibold text-base">Danh sách combo</h4>
-                                    <Badge variant="secondary" className="text-xs font-semibold">
-                                      {activeCombos.length} combo
-                                    </Badge>
-                                  </div>
-                                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-                                    {activeCombos.map((combo) => {
-                                      const mainProducts = combo?.items?.filter(item => !item.isGift) || []
-                                      const giftProducts = combo?.items?.filter(item => item.isGift) || []
-                                      
-                                      return (
-                                        <div
-                                          key={combo?.id}
-                                          className="group relative p-4 border-2 border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-md transition-all duration-200 bg-gradient-to-br from-white to-gray-50"
-                                        >
-                                          {/* Promotion Badge */}
-                                          {combo?.isPromotionActive && (
-                                            <div className="absolute top-2 right-2">
-                                              <Badge variant="destructive" className="text-[10px] px-2 py-0.5 font-semibold animate-pulse">
-                                                🔥 Khuyến mãi
-                                              </Badge>
-                                            </div>
-                                          )}
+              <Select
+                value={categoryFilter}
+                onChange={(value) => {
+                  setCategoryFilter(value)
+                  setPage(1)
+                }}
+                style={{ minWidth: 200 }}
+                options={[
+                  { label: "Tất cả danh mục", value: "all" },
+                  ...(categories || []).map((category) => ({
+                    label: category?.name,
+                    value: category?.id,
+                  })),
+                ]}
+              />
+              <Select
+                value={statusFilter}
+                onChange={(value) => {
+                  setStatusFilter(value)
+                  setPage(1)
+                }}
+                style={{ minWidth: 180 }}
+                options={[
+                  { label: "Tất cả trạng thái", value: "all" },
+                  { label: "Hoạt động", value: "active" },
+                  { label: "Không hoạt động", value: "inactive" },
+                ]}
+              />
+            </Space>
 
-                                          {/* Combo Name */}
-                                          <div className="pr-16 mb-3">
-                                            <h5 className="font-bold text-sm text-gray-900 line-clamp-2 leading-tight">
-                                              {combo?.name}
-                                            </h5>
-                                          </div>
-
-                                          {/* Price Section */}
-                                          <div className="mb-3 p-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
-                                            {combo?.promotionalPrice && combo?.isPromotionActive ? (
-                                              <div className="space-y-1">
-                                                <div className="flex items-center justify-between">
-                                                  <span className="text-xs text-gray-500 line-through">
-                                                    {new Intl.NumberFormat("vi-VN", {
-                                                      style: "currency",
-                                                      currency: "VND",
-                                                    }).format(combo.price)}
-                                                  </span>
-                                                  <Badge variant="destructive" className="text-[9px] px-1.5 py-0 font-bold">
-                                                    -{Math.round(((combo.price - combo.promotionalPrice) / combo.price) * 100)}%
-                                                  </Badge>
-                                                </div>
-                                                <div className="text-lg font-bold text-red-600">
-                                                  {new Intl.NumberFormat("vi-VN", {
-                                                    style: "currency",
-                                                    currency: "VND",
-                                                  }).format(combo.promotionalPrice)}
-                                                </div>
-                                              </div>
-                                            ) : (
-                                              <div className="text-lg font-bold text-gray-900">
-                                                {new Intl.NumberFormat("vi-VN", {
-                                                  style: "currency",
-                                                  currency: "VND",
-                                                }).format(combo?.price || 0)}
-                                              </div>
-                                            )}
-                                          </div>
-
-                                          {/* Products List */}
-                                          {combo?.items && combo.items.length > 0 && (
-                                            <div className="space-y-2 pt-2 border-t border-gray-200">
-                                              {mainProducts.length > 0 && (
-                                                <div className="space-y-1.5">
-                                                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
-                                                    Sản phẩm chính:
-                                                  </p>
-                                                  <div className="space-y-1">
-                                                    {mainProducts.map((item, idx) => (
-                                                      <div key={idx} className="flex items-center gap-2 text-xs text-gray-700">
-                                                        <div className="h-1.5 w-1.5 rounded-full bg-blue-500 flex-shrink-0" />
-                                                        <span className="font-medium flex-1">{item.inventoryProduct?.name}</span>
-                                                        <span className="text-gray-500">x{item.quantity}</span>
-                                                      </div>
-                                                    ))}
-                                                  </div>
-                                                </div>
-                                              )}
-                                              
-                                              {giftProducts.length > 0 && (
-                                                <div className="space-y-1.5 pt-2 border-t border-gray-200">
-                                                  <p className="text-[10px] font-semibold text-green-600 uppercase tracking-wide">
-                                                    Tặng kèm:
-                                                  </p>
-                                                  <div className="space-y-1">
-                                                    {giftProducts.map((item, idx) => (
-                                                      <div key={idx} className="flex items-center gap-2 text-xs text-gray-700">
-                                                        <div className="h-1.5 w-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                                        <span className="font-medium flex-1">{item.inventoryProduct?.name}</span>
-                                                        <span className="text-gray-500">x{item.quantity}</span>
-                                                      </div>
-                                                    ))}
-                                                  </div>
-                                                </div>
-                                              )}
-                                            </div>
-                                          )}
-
-                                          {/* Promotion Dates */}
-                                          {(combo?.promotionStart || combo?.promotionEnd) && (
-                                            <div className="mt-2 pt-2 border-t border-gray-200">
-                                              <div className="flex items-center gap-3 text-[10px] text-gray-500">
-                                                {combo?.promotionStart && (
-                                                  <div>
-                                                    <span className="font-semibold">Bắt đầu:</span>{" "}
-                                                    {new Date(combo.promotionStart).toLocaleDateString("vi-VN")}
-                                                  </div>
-                                                )}
-                                                {combo?.promotionEnd && (
-                                                  <div>
-                                                    <span className="font-semibold">Kết thúc:</span>{" "}
-                                                    {new Date(combo.promotionEnd).toLocaleDateString("vi-VN")}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )
-                                    })}
-                                  </div>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          ) : (
-                            <span className="text-gray-400">0 combo</span>
-                          )
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={product?.isActive ? "default" : "secondary"}>
-                          {product?.isActive ? "Hoạt động" : "Không hoạt động"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {product?.createdAt ? new Date(product.createdAt).toLocaleDateString("vi-VN") : "-"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Link href={`/products/${product?.id}`}>
-                            <Button variant="ghost" size="icon">
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(product?.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                        {searchQuery || categoryFilter !== "all" || statusFilter !== "all"
-                          ? "Không tìm thấy sản phẩm nào"
-                          : "Không có dữ liệu"}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
+            <Table
+              columns={columns}
+              dataSource={isLoading ? (skeletonData as any) : (filteredProducts || [])}
+              loading={false}
+              rowKey={(record) => (record as any).isSkeleton ? (record as any).id : (record?.id || `product-${Math.random()}`)}
+              scroll={{ x: "max-content", y: 550 }}
+              onRow={(record) => ({
+                onClick: (e) => {
+                  // Không chuyển trang nếu click vào button, popover hoặc link
+                  const target = e.target as HTMLElement
+                  if (
+                    target.closest('button') ||
+                    target.closest('.ant-popover') ||
+                    target.closest('a') ||
+                    (record as any).isSkeleton
+                  ) {
+                    return
+                  }
+                  router.push(`/products/${record?.id}`)
+                },
+                style: { cursor: 'pointer' }
+              })}
+              pagination={
+                !isLoading && paginationMeta?.totalPages
+                  ? {
+                      current: page,
+                      total: paginationMeta.total,
+                      pageSize: pageSize,
+                      showSizeChanger: false,
+                      showTotal: (total, range) =>
+                        ``,
+                      onChange: (newPage) => setPage(newPage),
+                    }
+                  : false
+              }
+              locale={{
+                emptyText:
+                  searchQuery || categoryFilter !== "all" || statusFilter !== "all"
+                    ? "Không tìm thấy sản phẩm nào"
+                    : "Không có dữ liệu",
+              }}
+            />
+          </Space>
         </Card>
-      </div>
+      </Space>
+
+      <Modal
+        title="Tạo sản phẩm mới"
+        open={isCreateOpen}
+        onCancel={handleCreateCancel}
+        footer={null}
+        destroyOnClose
+        centered
+      >
+        <Form
+          layout="vertical"
+          form={createForm}
+          initialValues={{}}
+          onFinish={handleCreateFinish}
+        >
+          <Form.Item label="Ảnh sản phẩm">
+            <ImageUpload
+              value={createForm.getFieldValue("image") || ""}
+              onChange={(url) => {
+                if (createProductImageUrl && createProductImageUrl !== url) {
+                  deleteImage(createProductImageUrl)
+                }
+                createForm.setFieldsValue({ image: url })
+                setCreateProductImageUrl(url)
+              }}
+              folder="product-images"
+              disabled={createMutation.isPending}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label={
+              <>
+                Tên sản phẩm <span style={{ color: "red" }}>*</span>
+              </>
+            }
+            name="name"
+            rules={[{ required: true, message: "Tên sản phẩm là bắt buộc" }]}
+          >
+            <Input placeholder="Nhập tên sản phẩm" />
+          </Form.Item>
+
+          <Form.Item label="Mô tả" name="description">
+            <Input.TextArea rows={3} placeholder="Mô tả sản phẩm" />
+          </Form.Item>
+
+          <Form.Item
+            label={
+              <>
+                Danh mục <span style={{ color: "red" }}>*</span>
+              </>
+            }
+            name="categoryId"
+            rules={[{ required: true, message: "Danh mục là bắt buộc" }]}
+          >
+            <Select
+              placeholder="Chọn danh mục"
+              options={(categories || []).map((category) => ({
+                label: category?.name,
+                value: category?.id,
+              }))}
+              showSearch
+              optionFilterProp="label"
+            />
+          </Form.Item>
+
+          <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: 12, marginTop: 8 }}>
+            <span style={{ color: "#1d4ed8", fontSize: 13 }}>
+              <strong>Lưu ý:</strong> Sau khi tạo, bạn sẽ được chuyển đến trang chi tiết để thêm combo và sản phẩm trong kho.
+                  </span>
+          </div>
+
+          <Space style={{ width: "100%", justifyContent: "flex-end", marginTop: 16 }}>
+            <Button onClick={handleCreateCancel}>Hủy</Button>
+            <Button type="primary" htmlType="submit" loading={createMutation.isPending}>
+              Tạo sản phẩm
+                  </Button>
+          </Space>
+        </Form>
+      </Modal>
     </DashboardLayout>
   )
 }
