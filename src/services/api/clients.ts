@@ -152,11 +152,40 @@ export const clientsApi = {
   },
 
   // Lấy danh sách voucher của khách hàng
-  getClientVouchers: async (clientId: string): Promise<ClientVoucher[]> => {
-    console.log(`[API] Calling GET /vouchers/client/${clientId}`);
-    const response = await apiClient.get(`/vouchers/client/${clientId}`);
-    console.log(`[API] Response:`, response?.data);
-    return response?.data?.data || response?.data || [];
+  getClientVouchers: async (clientId: string, params?: PaginationParams): Promise<ClientVoucher[] | PaginatedResponse<ClientVoucher>> => {
+    // Chỉ truyền params hợp lệ (loại bỏ undefined/null)
+    const cleanParams: Record<string, any> = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        const value = params[key as keyof PaginationParams];
+        if (value !== undefined && value !== null) {
+          cleanParams[key] = value;
+        }
+      });
+    }
+    const response = await apiClient.get(`/vouchers/client/${clientId}`, Object.keys(cleanParams).length > 0 ? { params: cleanParams } : {});
+    
+    // Xử lý response với cấu trúc: { statusCode, message, data: { data: [...], pagination: {...} } }
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      const pagination = response.data.data.pagination;
+      if (pagination) {
+        return {
+          data: response.data.data.data,
+          meta: {
+            page: pagination.page,
+            pageSize: pagination.pageSize,
+            total: pagination.total,
+            totalPages: pagination.totalPages,
+          }
+        } as PaginatedResponse<ClientVoucher>;
+      }
+      // Nếu có data nhưng không có pagination, trả về array
+      return response.data.data.data;
+    }
+    
+    // Fallback: nếu không có cấu trúc nested, thử lấy trực tiếp
+    const data = response?.data?.data || response?.data;
+    return Array.isArray(data) ? data : [];
   },
 
   // Đổi voucher cho khách hàng

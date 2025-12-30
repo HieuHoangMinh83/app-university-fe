@@ -25,7 +25,7 @@ export interface InventoryTransaction {
     id: string;
     inventoryProductId: string;
     quantity: number;
-    expiryDate: string;
+    expiryDate: string | null;
     notes: string | null;
     sessionCode: string;
     importedById: string;
@@ -86,9 +86,27 @@ export const inventoryTransactionsApi = {
     }
     const response = await apiClient.get("/inventory/transactions", Object.keys(cleanParams).length > 0 ? { params: cleanParams } : {});
     
+    // Xử lý response với cấu trúc: { statusCode, message, data: { data: [...], pagination: {...} } }
+    if (response?.data?.statusCode && response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      const pagination = response.data.data.pagination || response.data.data.meta;
+      if (pagination) {
+        return {
+          data: response.data.data.data,
+          meta: {
+            page: pagination.page,
+            pageSize: pagination.pageSize,
+            total: pagination.total,
+            totalPages: pagination.totalPages,
+          }
+        } as PaginatedResponse<InventoryTransaction>;
+      }
+      // Nếu có data nhưng không có pagination, trả về array
+      return response.data.data.data;
+    }
+    
     // Xử lý response với cấu trúc: { data: { data: [...], pagination: {...} } }
     if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
-      const pagination = response.data.data.pagination;
+      const pagination = response.data.data.pagination || response.data.data.meta;
       if (pagination) {
         return {
           data: response.data.data.data,

@@ -150,10 +150,23 @@ export const vouchersApi = {
 
   // Lấy danh sách voucher có thể đổi (redeemable)
   getRedeemableList: async (): Promise<Voucher[]> => {
-    console.log(`[API] Calling GET /vouchers/redeemable/list`);
     const response = await apiClient.get("/vouchers/redeemable/list");
-    console.log(`[API] Response:`, response?.data);
-    return response?.data?.data || response?.data || [];
+    
+    // Xử lý response với cấu trúc: { message: "", data: { data: [...], pagination: {...} } }
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      return response.data.data.data;
+    }
+    
+    // Fallback: nếu không có cấu trúc nested, thử lấy trực tiếp từ data.data hoặc data
+    if (response?.data?.data && Array.isArray(response.data.data)) {
+      return response.data.data;
+    }
+    
+    if (response?.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+    
+    return [];
   },
 };
 

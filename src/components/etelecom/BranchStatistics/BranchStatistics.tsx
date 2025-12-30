@@ -22,11 +22,6 @@ export default function BranchStatistics({ from, to }: BranchStatisticsProps) {
     const timeSeries = timeSeriesData?.timeSeries ?? [];
     const comparison = timeSeriesData?.comparison ?? [];
 
-    // Debug logging
-    console.log("TimeSeries Data:", timeSeries);
-    console.log("Comparison Data:", comparison);
-    console.log("TimeSeries Loading:", timeSeriesLoading);
-
     // ✅ Safe data conversion helper
     const safeString = (value: any): string => {
         if (typeof value === 'string') return value;
@@ -165,10 +160,6 @@ export default function BranchStatistics({ from, to }: BranchStatisticsProps) {
             }
             return String(bValue).localeCompare(String(aValue));
         });
-
-    // Debug: Log the sorted order
-    console.log('comparisonChartData (charts - oldest first):', comparisonChartData.map(item => item.period));
-    console.log('comparisonTableData (table - newest first):', comparisonTableData.map(item => item.period));
 
     // ✅ Chart data preparation for overview
     const chartData = [

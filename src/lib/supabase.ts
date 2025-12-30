@@ -27,7 +27,6 @@ export async function uploadImage(file: File, folder: string = 'avatars'): Promi
       })
 
     if (error) {
-      console.error('Supabase upload error:', error)
       throw error
     }
 
@@ -38,7 +37,6 @@ export async function uploadImage(file: File, folder: string = 'avatars'): Promi
 
     return urlData.publicUrl
   } catch (error: any) {
-    console.error('Error uploading image:', error)
     throw new Error(error?.message || 'Failed to upload image')
   }
 }
@@ -64,12 +62,10 @@ export async function deleteImage(imageUrl: string): Promise<void> {
       .remove([filePath])
 
     if (error) {
-      console.error('Error deleting image:', error)
-      // Don't throw, just log - image might not exist or already deleted
+      // Don't throw - image might not exist or already deleted
     }
   } catch (error: any) {
-    console.error('Error deleting image:', error)
-    // Don't throw, just log - image might not exist
+    // Don't throw - image might not exist
   }
 }
 

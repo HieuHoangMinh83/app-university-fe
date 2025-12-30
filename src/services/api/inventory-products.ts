@@ -202,5 +202,66 @@ export const inventoryProductsApi = {
     const data = response?.data?.data || response?.data;
     return Array.isArray(data) ? data : [];
   },
+
+  // Lấy danh sách products với validItems và expiredItems từ /inventory/transactions
+  getTransactions: async (params?: PaginationParams): Promise<InventoryProduct[] | PaginatedResponse<InventoryProduct>> => {
+    const cleanParams: Record<string, any> = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        const value = params[key as keyof PaginationParams];
+        if (value !== undefined && value !== null) {
+          cleanParams[key] = value;
+        }
+      });
+    }
+    const response = await apiClient.get("/inventory/transactions", Object.keys(cleanParams).length > 0 ? { params: cleanParams } : {});
+    
+    // Xử lý response với cấu trúc: { statusCode, message, data: { data: [...], meta: {...} } }
+    if (response?.data?.statusCode && response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      const meta = response.data.data.meta;
+      if (meta) {
+        return {
+          data: response.data.data.data,
+          meta: {
+            page: meta.page,
+            pageSize: meta.pageSize,
+            total: meta.total,
+            totalPages: meta.totalPages,
+          }
+        } as PaginatedResponse<InventoryProduct>;
+      }
+      // Nếu có data nhưng không có meta, trả về array
+      return response.data.data.data;
+    }
+    
+    // Fallback to other structures
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      const pagination = response.data.data.pagination || response.data.data.meta;
+      if (pagination) {
+        return {
+          data: response.data.data.data,
+          meta: {
+            page: pagination.page,
+            pageSize: pagination.pageSize,
+            total: pagination.total,
+            totalPages: pagination.totalPages,
+          }
+        } as PaginatedResponse<InventoryProduct>;
+      }
+      return response.data.data.data;
+    }
+    
+    // Check if response has nested pagination structure: { data: { data: [...], meta: {...} } }
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data) && response?.data?.data?.meta) {
+      return response.data.data as PaginatedResponse<InventoryProduct>;
+    }
+    // Check if response is direct paginated: { data: [...], meta: {...} }
+    if (response?.data?.data && Array.isArray(response.data.data) && response?.data?.meta) {
+      return response.data as PaginatedResponse<InventoryProduct>;
+    }
+    // Fallback to non-paginated response
+    const data = response?.data?.data || response?.data;
+    return Array.isArray(data) ? data : [];
+  },
 };
 

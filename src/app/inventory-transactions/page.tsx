@@ -3,7 +3,6 @@
 import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { inventoryTransactionsApi, InventoryTransaction, TransactionType } from "@/services/api/inventory-transactions"
-import { inventoryApi, InventorySession } from "@/services/api/inventory"
 import { inventoryProductsApi } from "@/services/api/inventory-products"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,121 +13,96 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, Search, ArrowDownCircle, ArrowUpCircle, Filter, X, Layers } from "lucide-react"
+import { Loader2, Search, ArrowDownCircle, ArrowUpCircle, Filter, X, Package } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
-import Link from "next/link"
 
 export default function InventoryTransactionsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<"all" | "IMPORT" | "EXPORT">("all")
   const [productFilter, setProductFilter] = useState<string>("all")
-  const [startDate, setStartDate] = useState<string>("")
-  const [endDate, setEndDate] = useState<string>("")
-  const [selectedSessionCode, setSelectedSessionCode] = useState<string | null>(null)
+  const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(20)
   
   // Temporary filter states for dialog
   const [tempProductFilter, setTempProductFilter] = useState<string>("all")
-  const [tempStartDate, setTempStartDate] = useState<string>("")
-  const [tempEndDate, setTempEndDate] = useState<string>("")
 
-  const { data: sessionsResponse, isLoading: isLoadingSessions } = useQuery({
-    queryKey: ["inventory-sessions", activeTab, startDate, endDate],
+  const { data: transactionsResponse, isLoading: isLoadingTransactions } = useQuery({
+    queryKey: ["inventory-transactions", activeTab, productFilter, page, pageSize],
     queryFn: () => {
-      const params: any = {}
+      const params: any = { page, pageSize }
       if (activeTab !== "all") {
         params.type = activeTab as TransactionType
       }
-      return inventoryApi.getSessions(params)
+      if (productFilter !== "all") {
+        params.productId = productFilter
+      }
+      return inventoryTransactionsApi.getAll(params)
     },
   })
 
-  // Extract sessions array from paginated or non-paginated response
-  const sessions = useMemo(() => {
-    if (!sessionsResponse) return undefined
-    if (Array.isArray(sessionsResponse)) return sessionsResponse
-    if ('data' in sessionsResponse && Array.isArray(sessionsResponse.data)) {
-      return sessionsResponse.data
+  // Extract transactions array from paginated or non-paginated response
+  const transactions = useMemo(() => {
+    if (!transactionsResponse) return undefined
+    if (Array.isArray(transactionsResponse)) return transactionsResponse
+    if ('data' in transactionsResponse && Array.isArray(transactionsResponse.data)) {
+      return transactionsResponse.data
     }
     return []
-  }, [sessionsResponse])
+  }, [transactionsResponse])
 
-  // Lấy chi tiết session khi click - sử dụng dữ liệu từ sessions nếu có, nếu không thì fetch từ API
-  const selectedSession = useMemo(() => {
-    if (!selectedSessionCode || !sessions) return null
-    return sessions.find(s => (s as any).code === selectedSessionCode || s.id === selectedSessionCode) || null
-  }, [selectedSessionCode, sessions])
+  const pagination = useMemo(() => {
+    if (!transactionsResponse) return undefined
+    if (Array.isArray(transactionsResponse)) return undefined
+    if ('meta' in transactionsResponse) return transactionsResponse.meta
+    return undefined
+  }, [transactionsResponse])
 
-  const { data: sessionDetailFromApi, isLoading: isLoadingSessionDetail } = useQuery({
-    queryKey: ["inventory-session-detail", selectedSessionCode],
-    queryFn: async () => {
-      if (!selectedSessionCode || !selectedSession?.id) return null
-      // Chỉ fetch từ API nếu session không có transactions hoặc transactions rỗng
-      if (!selectedSession.transactions || selectedSession.transactions.length === 0) {
-        return inventoryApi.getSessionById(selectedSession.id)
-      }
-      return null
-    },
-    enabled: !!selectedSessionCode && !!selectedSession?.id && (!selectedSession.transactions || selectedSession.transactions.length === 0),
+  // Get all products for filter dropdown
+  const { data: allProductsResponse } = useQuery({
+    queryKey: ["inventory-products-all"],
+    queryFn: () => inventoryProductsApi.getAll(),
   })
 
-  // Ưu tiên dùng dữ liệu từ sessions, nếu không có thì dùng từ API
-  const sessionDetail = selectedSession?.transactions && selectedSession.transactions.length > 0 
-    ? selectedSession 
-    : sessionDetailFromApi || selectedSession
+  const allProducts = useMemo(() => {
+    if (!allProductsResponse) return []
+    if (Array.isArray(allProductsResponse)) return allProductsResponse
+    if ('data' in allProductsResponse && Array.isArray(allProductsResponse.data)) {
+      return allProductsResponse.data
+    }
+    return []
+  }, [allProductsResponse])
 
-  // Count active filters (không tính activeTab)
+  // Count active filters
   const activeFiltersCount = useMemo(() => {
     let count = 0
     if (productFilter !== "all") count++
-    if (startDate) count++
-    if (endDate) count++
     return count
-  }, [productFilter, startDate, endDate])
+  }, [productFilter])
 
   // Initialize temp filters when dialog opens
   const handleFilterOpen = (open: boolean) => {
     setIsFilterOpen(open)
     if (open) {
       setTempProductFilter(productFilter)
-      setTempStartDate(startDate)
-      setTempEndDate(endDate)
     }
   }
 
   // Apply filters
   const handleApplyFilters = () => {
     setProductFilter(tempProductFilter)
-    setStartDate(tempStartDate)
-    setEndDate(tempEndDate)
     setIsFilterOpen(false)
+    setPage(1)
   }
 
   // Clear all filters
   const handleClearFilters = () => {
     setTempProductFilter("all")
-    setTempStartDate("")
-    setTempEndDate("")
     setProductFilter("all")
-    setStartDate("")
-    setEndDate("")
     setIsFilterOpen(false)
+    setPage(1)
   }
-
-  const { data: inventoryProductsResponse } = useQuery({
-    queryKey: ["inventory-products"],
-    queryFn: () => inventoryProductsApi.getAll(),
-  })
-
-  // Extract inventoryProducts array from paginated or non-paginated response
-  const inventoryProducts = useMemo(() => {
-    if (!inventoryProductsResponse) return undefined
-    if (Array.isArray(inventoryProductsResponse)) return inventoryProductsResponse
-    if ('data' in inventoryProductsResponse && Array.isArray(inventoryProductsResponse.data)) {
-      return inventoryProductsResponse.data
-    }
-    return []
-  }, [inventoryProductsResponse])
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString("vi-VN", {
@@ -140,93 +114,38 @@ export default function InventoryTransactionsPage() {
     })
   }
 
-  const formatDateOnly = (dateString: string) => {
+  const formatDateOnly = (dateString: string | null) => {
+    if (!dateString) return "-"
     return new Date(dateString).toLocaleDateString("vi-VN")
   }
 
-  // Filter sessions based on search query
-  const filteredSessions = useMemo(() => {
-    if (!Array.isArray(sessions)) return []
+  // Filter transactions based on search query
+  const filteredTransactions = useMemo(() => {
+    if (!Array.isArray(transactions)) return []
     
-    return sessions.filter((session) => {
+    return transactions.filter((transaction) => {
       // Search filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
-        const sessionCode = (session as any).code || session.id || ""
         const matchesSearch =
-          sessionCode.toLowerCase().includes(query) ||
-          session.description?.toLowerCase().includes(query) ||
-          session.createdBy?.name?.toLowerCase().includes(query) ||
-          session.createdBy?.phone?.toLowerCase().includes(query) ||
-          session.transactions?.some(t => 
-            t.inventoryItem?.inventoryProduct?.name?.toLowerCase().includes(query)
-          ) ||
+          transaction.sessionCode?.toLowerCase().includes(query) ||
+          transaction.session?.description?.toLowerCase().includes(query) ||
+          transaction.inventoryItem?.inventoryProduct?.name?.toLowerCase().includes(query) ||
+          transaction.performedBy?.name?.toLowerCase().includes(query) ||
+          transaction.performedBy?.phone?.toLowerCase().includes(query) ||
           false
         if (!matchesSearch) return false
       }
       
-      // Product filter
-      if (productFilter !== "all") {
-        const hasProduct =           session.transactions?.some(t => 
-            t.inventoryItem?.inventoryProduct?.id === productFilter
-          )
-        if (!hasProduct) return false
-      }
-      
-      // Date filter
-      if (startDate) {
-        const sessionDate = new Date(session.createdAt)
-        const start = new Date(startDate)
-        start.setHours(0, 0, 0, 0)
-        if (sessionDate < start) return false
-      }
-      
-      if (endDate) {
-        const sessionDate = new Date(session.createdAt)
-        const end = new Date(endDate + "T23:59:59")
-        if (sessionDate > end) return false
-      }
-      
       return true
     })
-  }, [sessions, searchQuery, productFilter, startDate, endDate])
+  }, [transactions, searchQuery])
 
-  // Tạo tóm tắt session (trả về JSX)
-  const getSessionSummary = (session: InventorySession) => {
-    if (!session.transactions || session.transactions.length === 0) {
-      return <span className="text-gray-400">-</span>
-    }
-    
-    // Nhóm theo sản phẩm và tính tổng số lượng
-    const productMap = new Map<string, { name: string; quantity: number }>()
-    
-    session.transactions.forEach(transaction => {
-      const productId = transaction.inventoryItem?.inventoryProduct?.id || ""
-      const productName = transaction.inventoryItem?.inventoryProduct?.name || "Không xác định"
-      const quantity = transaction.quantity || 0
-      
-      if (productId && productMap.has(productId)) {
-        const existing = productMap.get(productId)!
-        existing.quantity += quantity
-      } else if (productId) {
-        productMap.set(productId, { name: productName, quantity })
-      }
-    })
-    
-    // Tạo danh sách sản phẩm
-    const productList = Array.from(productMap.values())
-    
-    return (
-      <div className="flex flex-col gap-1">
-        {productList.map((p, index) => (
-          <span key={index} className="text-sm">
-            {p.name} x {p.quantity}
-          </span>
-        ))}
-      </div>
-    )
-  }
-
+  // Get selected transaction for detail view
+  const selectedTransaction = useMemo(() => {
+    if (!selectedTransactionId || !Array.isArray(transactions)) return null
+    return transactions.find(t => t.id === selectedTransactionId) || null
+  }, [selectedTransactionId, transactions])
 
   return (
     <DashboardLayout>
@@ -238,8 +157,11 @@ export default function InventoryTransactionsPage() {
         <Card>
           <CardHeader>
             <div className="flex flex-col gap-4">
-              <CardTitle>Danh sách Sessions</CardTitle>
-              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "all" | "IMPORT" | "EXPORT")}>
+              <CardTitle>Danh sách Giao dịch</CardTitle>
+              <Tabs value={activeTab} onValueChange={(v) => {
+                setActiveTab(v as "all" | "IMPORT" | "EXPORT")
+                setPage(1)
+              }}>
                 <TabsList>
                   <TabsTrigger value="all">Tất cả</TabsTrigger>
                   <TabsTrigger value="IMPORT">
@@ -256,7 +178,7 @@ export default function InventoryTransactionsPage() {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
-                    placeholder="Tìm kiếm theo mã session, mô tả, người tạo, sản phẩm..."
+                    placeholder="Tìm kiếm theo mã session, mô tả, sản phẩm, người thực hiện..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10"
@@ -287,7 +209,7 @@ export default function InventoryTransactionsPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">Tất cả sản phẩm</SelectItem>
-                            {Array.isArray(inventoryProducts) && inventoryProducts.map((product) => (
+                            {allProducts.map((product) => (
                               <SelectItem key={product?.id} value={product?.id}>
                                 {product?.name}
                               </SelectItem>
@@ -296,64 +218,16 @@ export default function InventoryTransactionsPage() {
                         </Select>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="filter-startDate">Từ ngày</Label>
-                          <Input
-                            id="filter-startDate"
-                            type="date"
-                            value={tempStartDate}
-                            onChange={(e) => setTempStartDate(e.target.value)}
-                            className="mt-2"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="filter-endDate">Đến ngày</Label>
-                          <Input
-                            id="filter-endDate"
-                            type="date"
-                            value={tempEndDate}
-                            onChange={(e) => setTempEndDate(e.target.value)}
-                            className="mt-2"
-                            min={tempStartDate || undefined}
-                          />
-                        </div>
-                      </div>
-
                       {activeFiltersCount > 0 && (
                         <div className="flex flex-wrap gap-2 pt-2">
                           {productFilter !== "all" && (
                             <Badge variant="secondary" className="flex items-center gap-1">
-                              Sản phẩm: {Array.isArray(inventoryProducts) ? inventoryProducts.find(p => p?.id === productFilter)?.name : ""}
+                              Sản phẩm: {allProducts.find(p => p?.id === productFilter)?.name}
                               <X
                                 className="h-3 w-3 cursor-pointer"
                                 onClick={() => {
                                   setTempProductFilter("all")
                                   setProductFilter("all")
-                                }}
-                              />
-                            </Badge>
-                          )}
-                          {startDate && (
-                            <Badge variant="secondary" className="flex items-center gap-1">
-                              Từ: {new Date(startDate).toLocaleDateString("vi-VN")}
-                              <X
-                                className="h-3 w-3 cursor-pointer"
-                                onClick={() => {
-                                  setTempStartDate("")
-                                  setStartDate("")
-                                }}
-                              />
-                            </Badge>
-                          )}
-                          {endDate && (
-                            <Badge variant="secondary" className="flex items-center gap-1">
-                              Đến: {new Date(endDate).toLocaleDateString("vi-VN")}
-                              <X
-                                className="h-3 w-3 cursor-pointer"
-                                onClick={() => {
-                                  setTempEndDate("")
-                                  setEndDate("")
                                 }}
                               />
                             </Badge>
@@ -375,7 +249,7 @@ export default function InventoryTransactionsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {isLoadingSessions ? (
+            {isLoadingTransactions ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin" />
               </div>
@@ -386,197 +260,228 @@ export default function InventoryTransactionsPage() {
                     <TableRow>
                       <TableHead>Mã Session</TableHead>
                       <TableHead>Loại</TableHead>
-                      <TableHead>Mô tả</TableHead>
-                      <TableHead>Tóm tắt</TableHead>
-                      <TableHead>Người tạo</TableHead>
-                      <TableHead>Thời gian tạo</TableHead>
-                      <TableHead>Số lô hàng</TableHead>
+                      <TableHead>Sản phẩm</TableHead>
+                      <TableHead>Số lượng</TableHead>
+                      <TableHead>Ngày hết hạn</TableHead>
+                      <TableHead>Người thực hiện</TableHead>
+                      <TableHead>Thời gian</TableHead>
                       <TableHead>Thao tác</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredSessions && filteredSessions.length > 0 ? (
-                      filteredSessions.map((session) => {
-                        const sessionCode = (session as any).code || session.id || ""
-                        return (
-                          <TableRow 
-                            key={sessionCode}
-                            className="cursor-pointer hover:bg-gray-50"
-                            onClick={() => setSelectedSessionCode(sessionCode)}
-                          >
-                            <TableCell>
-                              <Badge variant="outline" className="font-mono">
-                                {sessionCode}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={session.type === "IMPORT" ? "default" : "destructive"}>
-                                {session.type === "IMPORT" ? "Nhập kho" : "Xuất kho"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="max-w-[200px] truncate">
-                              {session.description || "-"}
-                            </TableCell>
-                            <TableCell className="max-w-[300px]">
-                              {getSessionSummary(session)}
-                            </TableCell>
-                            <TableCell>
-                              {session.createdBy?.name || "-"}
-                            </TableCell>
-                            <TableCell>
-                              {formatDate(session.createdAt)}
-                            </TableCell>
-                            <TableCell>
-                              {session._count?.transactions || session.transactions?.length || 0}
-                            </TableCell>
-                            <TableCell onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setSelectedSessionCode(sessionCode)}
-                              >
-                                Xem chi tiết
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })
+                    {filteredTransactions && filteredTransactions.length > 0 ? (
+                      filteredTransactions.map((transaction) => (
+                        <TableRow 
+                          key={transaction.id}
+                          className="cursor-pointer hover:bg-gray-50"
+                          onClick={() => setSelectedTransactionId(transaction.id)}
+                        >
+                          <TableCell>
+                            <Badge variant="outline" className="font-mono">
+                              {transaction.sessionCode}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={transaction.type === "IMPORT" ? "default" : "destructive"}>
+                              {transaction.type === "IMPORT" ? "Nhập kho" : "Xuất kho"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Package className="h-4 w-4 text-gray-400" />
+                              {transaction.inventoryItem?.inventoryProduct?.name || "-"}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className={transaction.type === "IMPORT" ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
+                              {transaction.type === "IMPORT" ? "+" : "-"}
+                              {transaction.quantity}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {formatDateOnly(transaction.inventoryItem?.expiryDate || null)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{transaction.performedBy?.name || "-"}</span>
+                              {transaction.performedBy?.phone && (
+                                <span className="text-xs text-gray-500">{transaction.performedBy.phone}</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {formatDate(transaction.createdAt)}
+                          </TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedTransactionId(transaction.id)}
+                            >
+                              Xem chi tiết
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
                     ) : (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                          {searchQuery || activeTab !== "all" || productFilter !== "all" || startDate || endDate
-                            ? "Không tìm thấy session nào"
-                            : "Không có session nào"}
+                          {searchQuery || activeTab !== "all" || productFilter !== "all"
+                            ? "Không tìm thấy giao dịch nào"
+                            : "Không có giao dịch nào"}
                         </TableCell>
                       </TableRow>
                     )}
                   </TableBody>
                 </Table>
 
-                  {/* Dialog chi tiết session */}
-                  <Dialog open={!!selectedSessionCode} onOpenChange={(open) => !open && setSelectedSessionCode(null)}>
-                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                      <div className="relative">
-                        <DialogHeader>
-                          <DialogTitle>
-                            Chi tiết Session: {selectedSessionCode}
-                          </DialogTitle>
-                        </DialogHeader>
-                        {isLoadingSessionDetail ? (
-                          <div className="flex items-center justify-center py-8">
-                            <Loader2 className="h-6 w-6 animate-spin" />
-                          </div>
-                        ) : sessionDetail ? (
-                          <div className="space-y-4">
+                {/* Pagination */}
+                {pagination && pagination.totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-gray-500">
+                      Hiển thị {(pagination.page - 1) * pagination.pageSize + 1} - {Math.min(pagination.page * pagination.pageSize, pagination.total)} trong tổng số {pagination.total} giao dịch
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={pagination.page <= 1}
+                      >
+                        Trước
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm">
+                          Trang {pagination.page} / {pagination.totalPages}
+                        </span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+                        disabled={pagination.page >= pagination.totalPages}
+                      >
+                        Sau
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Dialog chi tiết transaction */}
+                <Dialog open={!!selectedTransactionId} onOpenChange={(open) => !open && setSelectedTransactionId(null)}>
+                  <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <div className="relative">
+                      <DialogHeader>
+                        <DialogTitle>
+                          Chi tiết Giao dịch: {selectedTransaction?.sessionCode}
+                        </DialogTitle>
+                      </DialogHeader>
+                      {selectedTransaction ? (
+                        <div className="space-y-4 mt-4">
                           <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
                             <div>
-                              <Label className="text-sm text-gray-500">Người tạo</Label>
+                              <Label className="text-sm text-gray-500">Loại giao dịch</Label>
+                              <div className="mt-1">
+                                <Badge variant={selectedTransaction.type === "IMPORT" ? "default" : "destructive"}>
+                                  {selectedTransaction.type === "IMPORT" ? "Nhập kho" : "Xuất kho"}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-500">Mã Session</Label>
                               <div className="mt-1 font-medium">
-                                {sessionDetail.createdBy?.name || "-"}
+                                <Badge variant="outline" className="font-mono">
+                                  {selectedTransaction.sessionCode}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-500">Sản phẩm</Label>
+                              <div className="mt-1 font-medium">
+                                {selectedTransaction.inventoryItem?.inventoryProduct?.name || "-"}
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-500">Số lượng</Label>
+                              <div className={`mt-1 font-medium ${selectedTransaction.type === "IMPORT" ? "text-green-600" : "text-red-600"}`}>
+                                {selectedTransaction.type === "IMPORT" ? "+" : "-"}
+                                {selectedTransaction.quantity}
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-500">Ngày hết hạn</Label>
+                              <div className="mt-1 font-medium">
+                                {formatDateOnly(selectedTransaction.inventoryItem?.expiryDate || null)}
                               </div>
                             </div>
                             <div>
                               <Label className="text-sm text-gray-500">Thời gian tạo</Label>
                               <div className="mt-1 font-medium">
-                                {formatDate(sessionDetail.createdAt)}
+                                {formatDate(selectedTransaction.createdAt)}
                               </div>
                             </div>
                             <div>
-                              <Label className="text-sm text-gray-500">Số lượng lô hàng</Label>
-                              <div className="mt-1 font-medium">
-                                {sessionDetail.transactions?.length || 0}
+                              <Label className="text-sm text-gray-500">Người thực hiện</Label>
+                              <div className="mt-1">
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{selectedTransaction.performedBy?.name || "-"}</span>
+                                  {selectedTransaction.performedBy?.phone && (
+                                    <span className="text-xs text-gray-500">{selectedTransaction.performedBy.phone}</span>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                            {sessionDetail.description && (
+                            {selectedTransaction.orderItem && (
                               <div>
-                                <Label className="text-sm text-gray-500">Mô tả</Label>
-                                <div className="mt-1">{sessionDetail.description}</div>
-                              </div>
-                            )}
-                            {sessionDetail.notes && (
-                              <div className="col-span-2">
-                                <Label className="text-sm text-gray-500">Ghi chú</Label>
-                                <div className="mt-1">{sessionDetail.notes}</div>
+                                <Label className="text-sm text-gray-500">Đơn hàng</Label>
+                                <div className="mt-1 font-medium">
+                                  #{selectedTransaction.orderItem.order?.id?.slice(0, 8)} - {selectedTransaction.orderItem.order?.client?.name}
+                                </div>
                               </div>
                             )}
                           </div>
 
-                          <div>
-                            <h3 className="font-semibold mb-3">Danh sách giao dịch</h3>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>STT</TableHead>
-                                  <TableHead>Sản phẩm</TableHead>
-                                  <TableHead>Danh mục</TableHead>
-                                  <TableHead>Số lượng</TableHead>
-                                  <TableHead>Ngày hết hạn</TableHead>
-                                  <TableHead>Người thực hiện</TableHead>
-                                  <TableHead>Ghi chú</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {sessionDetail.transactions && sessionDetail.transactions.length > 0 ? (
-                                  sessionDetail.transactions.map((transaction, index) => {
-                                    const productId = transaction.inventoryItem?.inventoryProduct?.id
-                                    const product = Array.isArray(inventoryProducts) ? inventoryProducts.find(p => p.id === productId) : undefined
-                                    return (
-                                      <TableRow key={transaction.id}>
-                                        <TableCell className="font-medium">
-                                          {index + 1}
-                                        </TableCell>
-                                        <TableCell className="font-medium">
-                                          {transaction.inventoryItem?.inventoryProduct?.name || "-"}
-                                        </TableCell>
-                                        <TableCell>
-                                          {product?.category?.name || "-"}
-                                        </TableCell>
-                                        <TableCell>
-                                          <span className={transaction.type === "IMPORT" ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
-                                            {transaction.type === "IMPORT" ? "+" : "-"}
-                                            {transaction.quantity}
-                                          </span>
-                                        </TableCell>
-                                        <TableCell>
-                                          {transaction.inventoryItem?.expiryDate
-                                            ? formatDateOnly(transaction.inventoryItem.expiryDate)
-                                            : "-"}
-                                        </TableCell>
-                                        <TableCell>
-                                          <div className="flex flex-col">
-                                            <span className="font-medium">{transaction.performedBy?.name || "-"}</span>
-                                            {transaction.performedBy?.phone && (
-                                              <span className="text-xs text-gray-500">{transaction.performedBy.phone}</span>
-                                            )}
-                                          </div>
-                                        </TableCell>
-                                        <TableCell>
-                                          <span className="text-sm text-gray-600 max-w-[200px] truncate block">
-                                            {transaction.notes || "-"}
-                                          </span>
-                                        </TableCell>
-                                      </TableRow>
-                                    )
-                                  })
-                                ) : (
-                                  <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-4 text-gray-500">
-                                      Không có transaction nào
-                                    </TableCell>
-                                  </TableRow>
-                                )}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </div>
-                          ) : (
-                            <div className="text-center py-8 text-gray-500">
-                              Không tìm thấy thông tin session
+                          {/* Session Info */}
+                          {selectedTransaction.session && (
+                            <div>
+                              <h3 className="font-semibold mb-3">Thông tin Session</h3>
+                              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                                <div>
+                                  <Label className="text-sm text-gray-500">Mô tả</Label>
+                                  <div className="mt-1">{selectedTransaction.session.description || "-"}</div>
+                                </div>
+                                <div>
+                                  <Label className="text-sm text-gray-500">Ghi chú</Label>
+                                  <div className="mt-1">{selectedTransaction.session.notes || "-"}</div>
+                                </div>
+                                <div>
+                                  <Label className="text-sm text-gray-500">Thời gian tạo session</Label>
+                                  <div className="mt-1 font-medium">
+                                    {formatDate(selectedTransaction.session.createdAt)}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+
+                          {/* Notes */}
+                          {selectedTransaction.notes && (
+                            <div>
+                              <h3 className="font-semibold mb-3">Ghi chú</h3>
+                              <div className="p-4 bg-gray-50 rounded-lg">
+                                {selectedTransaction.notes}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          Không tìm thấy thông tin giao dịch
+                        </div>
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             )}
           </CardContent>
@@ -585,4 +490,3 @@ export default function InventoryTransactionsPage() {
     </DashboardLayout>
   )
 }
-

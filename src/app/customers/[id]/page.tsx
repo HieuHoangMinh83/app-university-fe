@@ -6,25 +6,100 @@ import { clientsApi, ClientVoucher, RedeemVoucherDto } from "@/services/api/clie
 import { Order, ordersApi, CreateOrderDto } from "@/services/api/orders"
 import { productsApi, Product } from "@/services/api/products"
 import { vouchersApi, Voucher, CreateVoucherDto, VoucherType } from "@/services/api/vouchers"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { Loader2, ArrowLeft, Phone, MapPin, Gift, Calendar, User, ShoppingBag, TrendingUp, ChevronRight, Receipt, Plus, Trash2, Minus, ChevronsUpDown, Check, Sparkles, Coins } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { useForm, useFieldArray, Controller } from "react-hook-form"
 import { toast } from "sonner"
+
+// Custom Badge component
+function Badge({ variant = "default", className = "", children }: { variant?: "default" | "secondary" | "destructive" | "outline", className?: string, children: React.ReactNode }) {
+  const variantClasses = {
+    default: "bg-blue-600 text-white",
+    secondary: "bg-gray-100 text-gray-800 border-gray-300",
+    destructive: "bg-red-100 text-red-800 border-red-300",
+    outline: "border border-gray-300 text-gray-700 bg-white"
+  }
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${variantClasses[variant]} ${className}`}>
+      {children}
+    </span>
+  )
+}
+
+// Custom Avatar component
+function Avatar({ className = "", children }: { className?: string, children: React.ReactNode }) {
+  return <div className={`rounded-full overflow-hidden ${className}`}>{children}</div>
+}
+function AvatarImage({ src, alt }: { src?: string, alt?: string }) {
+  if (!src) return null
+  return <img src={src} alt={alt} className="w-full h-full object-cover" />
+}
+function AvatarFallback({ className = "", children }: { className?: string, children: React.ReactNode }) {
+  return <div className={`w-full h-full flex items-center justify-center ${className}`}>{children}</div>
+}
+
+// Custom Modal component
+function Modal({ open, onClose, title, description, children, className = "" }: {
+  open: boolean
+  onClose: () => void
+  title?: React.ReactNode
+  description?: string
+  children: React.ReactNode
+  className?: string
+}) {
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+      <div className={`relative bg-white rounded-lg shadow-lg w-full max-w-[1000px] max-h-[95vh] overflow-y-auto m-4 ${className}`}>
+        {(title || description) && (
+          <div className="sticky top-0 bg-white border-b px-6 py-4 z-10">
+            {title && <div className="text-lg font-semibold text-center">{title}</div>}
+            {description && <p className="text-center text-sm text-gray-600 mt-1">{description}</p>}
+          </div>
+        )}
+        <div className="p-6">
+          {children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Custom Tabs component
+function Tabs({ value, onValueChange, className = "", children }: {
+  value: string
+  onValueChange: (value: string) => void
+  className?: string
+  children: React.ReactNode
+}) {
+  return <div className={className}>{children}</div>
+}
+function TabsList({ className = "", children }: { className?: string, children: React.ReactNode }) {
+  return <div className={className}>{children}</div>
+}
+function TabsTrigger({ value, className = "", children, onClick }: {
+  value: string
+  className?: string
+  children: React.ReactNode
+  onClick?: () => void
+}) {
+  const handleClick = () => {
+    onClick?.()
+  }
+  return <div className={className} onClick={handleClick}>{children}</div>
+}
+function TabsContent({ value, className = "", children }: {
+  value: string
+  className?: string
+  children: React.ReactNode
+}) {
+  return <div className={className}>{children}</div>
+}
 
 export default function ClientDetailPage() {
   const params = useParams()
@@ -42,6 +117,10 @@ export default function ClientDetailPage() {
   const [comboPopoverOpen, setComboPopoverOpen] = useState<Record<number, boolean>>({})
   const [voucherSearchValue, setVoucherSearchValue] = useState("")
   const [voucherPopoverOpen, setVoucherPopoverOpen] = useState(false)
+  const [voucherPage, setVoucherPage] = useState(1)
+  const [voucherPageSize] = useState(5)
+  const [orderPage, setOrderPage] = useState(1)
+  const [orderPageSize] = useState(5)
 
   const { data: client, isLoading: isLoadingClient } = useQuery({
     queryKey: ["client", clientId],
@@ -49,47 +128,87 @@ export default function ClientDetailPage() {
     enabled: !!clientId,
   })
 
-  const { data: products } = useQuery({
+  const { data: products, isLoading: isLoadingProducts } = useQuery({
     queryKey: ["products"],
     queryFn: () => productsApi.getAll(),
   })
 
   const { data: vouchers, isLoading: isLoadingRedeemableVouchers } = useQuery({
     queryKey: ["redeemableVouchers"],
-    queryFn: () => {
-      console.log("[React Query] Fetching redeemable vouchers...");
-      return vouchersApi.getRedeemableList();
-    },
+    queryFn: () => vouchersApi.getRedeemableList(),
     enabled: true,
   })
 
-  const { data: clientVouchers, isLoading: isLoadingClientVouchers } = useQuery({
-    queryKey: ["clientVouchers", clientId],
-    queryFn: () => {
-      console.log("[React Query] Fetching client vouchers for clientId:", clientId);
-      return clientsApi.getClientVouchers(clientId);
-    },
+  const { data: clientVouchersResponse, isLoading: isLoadingClientVouchers } = useQuery({
+    queryKey: ["clientVouchers", clientId, voucherPage, voucherPageSize],
+    queryFn: () => clientsApi.getClientVouchers(clientId, { page: voucherPage, pageSize: voucherPageSize }),
     enabled: !!clientId,
   })
 
-  // Orders are included in the client response
-  const orders = client?.orders || []
+  // Extract clientVouchers array and pagination meta from paginated or non-paginated response
+  const { clientVouchers, voucherPaginationMeta } = useMemo(() => {
+    if (!clientVouchersResponse) return { clientVouchers: undefined, voucherPaginationMeta: undefined }
+    
+    // If it's an array (non-paginated)
+    if (Array.isArray(clientVouchersResponse)) {
+      return { clientVouchers: clientVouchersResponse, voucherPaginationMeta: undefined }
+    }
+    
+    // If it's a paginated response
+    if ('data' in clientVouchersResponse && 'meta' in clientVouchersResponse) {
+      return {
+        clientVouchers: clientVouchersResponse.data,
+        voucherPaginationMeta: clientVouchersResponse.meta
+      }
+    }
+    
+    return { clientVouchers: [], voucherPaginationMeta: undefined }
+  }, [clientVouchersResponse])
 
-  // Debug: Log khi data thay đổi
-  useEffect(() => {
-    console.log("[Debug] clientId:", clientId);
-    console.log("[Debug] vouchers:", vouchers);
-    console.log("[Debug] clientVouchers:", clientVouchers);
-    console.log("[Debug] isLoadingRedeemableVouchers:", isLoadingRedeemableVouchers);
-    console.log("[Debug] isLoadingClientVouchers:", isLoadingClientVouchers);
-  }, [clientId, vouchers, clientVouchers, isLoadingRedeemableVouchers, isLoadingClientVouchers])
+  // Fetch orders with pagination
+  const { data: ordersResponse, isLoading: isLoadingOrders } = useQuery({
+    queryKey: ["orders", clientId, orderPage, orderPageSize],
+    queryFn: () => ordersApi.getAll({ clientId, page: orderPage, pageSize: orderPageSize }),
+    enabled: !!clientId,
+  })
+
+  // Extract orders array and pagination meta from paginated or non-paginated response
+  const { orders, orderPaginationMeta } = useMemo(() => {
+    if (!ordersResponse) return { orders: undefined, orderPaginationMeta: undefined }
+    
+    // If it's an array (non-paginated)
+    if (Array.isArray(ordersResponse)) {
+      return { orders: ordersResponse, orderPaginationMeta: undefined }
+    }
+    
+    // If it's a paginated response
+    if ('data' in ordersResponse && 'meta' in ordersResponse) {
+      return {
+        orders: ordersResponse.data,
+        orderPaginationMeta: ordersResponse.meta
+      }
+    }
+    
+    return { orders: [], orderPaginationMeta: undefined }
+  }, [ordersResponse])
 
   // Get all products with active combos
   const productsWithCombos = useMemo(() => {
-    if (!Array.isArray(products)) return []
-    return products.filter((product: Product) => 
-      product?.combos && Array.isArray(product.combos) && product.combos.some((combo) => combo?.isActive)
-    )
+    if (!products) {
+      return []
+    }
+    if (!Array.isArray(products)) {
+      return []
+    }
+    // Filter chỉ lấy products có combos active
+    // Lưu ý: Nếu API getAll() không trả về combos, cần gọi getById() để load combos
+    return products.filter((product: Product) => {
+      // Kiểm tra nếu product có combos và có ít nhất 1 combo active
+      if (product?.combos && Array.isArray(product.combos) && product.combos.length > 0) {
+        return product.combos.some((combo) => combo?.isActive)
+      }
+      return false
+    })
   }, [products])
 
   // Extended form type to include productId temporarily
@@ -102,12 +221,14 @@ export default function ClientDetailPage() {
   interface OrderFormData {
     items: OrderFormItem[]
     clientVoucherId?: string
+    paymentMethod?: "CASH" | "TRANSFER"
   }
 
   const { register, handleSubmit, control, watch, reset, setValue, formState: { errors } } = useForm<OrderFormData>({
     defaultValues: {
       items: [],
       clientVoucherId: undefined,
+      paymentMethod: "CASH",
     },
   })
 
@@ -287,13 +408,14 @@ export default function ClientDetailPage() {
     }
     
     // Convert to CreateOrderDto format
-    // Theo README, khi tạo order phải dùng clientVoucherId (id của ClientVoucher)
+    // Theo README, khi tạo order phải dùng clientVoucherId (id của ClientVoucher) và paymentMethod (optional, default: CASH)
     const orderData: CreateOrderDto = {
       items: data.items.map(item => ({
         comboId: item.comboId,
         quantity: item.quantity,
       })),
       clientVoucherId: data.clientVoucherId,
+      paymentMethod: data.paymentMethod || "CASH", // Default: CASH
     }
     
     createOrderMutation.mutate(orderData)
@@ -385,17 +507,13 @@ export default function ClientDetailPage() {
   }, [orderTotal.subtotal, clientVouchers, watch("clientVoucherId"), setValue])
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, "default" | "secondary" | "destructive"> = {
-      PENDING: "secondary",
-      PAID: "default",
-      CANCELLED: "destructive",
+    const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" }> = {
+      PENDING: { label: "Chờ xử lý", variant: "secondary" },
+      PAID: { label: "Đã thanh toán", variant: "default" },
+      CANCELLED: { label: "Đã hủy", variant: "destructive" },
     }
-    const labels: Record<string, string> = {
-      PENDING: "Chờ xử lý",
-      PAID: "Đã thanh toán",
-      CANCELLED: "Đã hủy",
-    }
-    return <Badge variant={variants[status] || "secondary"}>{labels[status] || status}</Badge>
+    const config = statusConfig[status] || { label: status, variant: "secondary" as const }
+    return <Badge variant={config.variant}>{config.label}</Badge>
   }
 
   if (isLoadingClient) {
@@ -414,10 +532,10 @@ export default function ClientDetailPage() {
         <div className="text-center py-8">
           <p className="text-gray-500">Không tìm thấy khách hàng</p>
           <Link href="/customers">
-            <Button className="mt-4">
-              <ArrowLeft className="mr-2 h-4 w-4" />
+            <button className="mt-4 px-4 py-2 bg-blue-600 !text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center gap-2 mx-auto">
+              <ArrowLeft className="h-4 w-4" />
               Quay lại
-            </Button>
+            </button>
           </Link>
         </div>
       </DashboardLayout>
@@ -428,37 +546,29 @@ export default function ClientDetailPage() {
     <DashboardLayout>
       <div className="space-y-6 w-full">
         {/* Main Card Container */}
-        <Card className="shadow-sm border-gray-200">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
           <div className="p-6 pb-3">
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem>
-                  <BreadcrumbLink href="/customers" className="text-gray-600 text-lg hover:text-gray-900">
-                    Quản lý khách hàng
-                  </BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator>
-                  <ChevronRight className="h-6 w-6" />
-                </BreadcrumbSeparator>
-                <BreadcrumbItem>
-                  <span className="text-blue-500 font-medium text-lg">Chi tiết khách hàng</span>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
+            <nav className="flex items-center gap-2 text-gray-600">
+              <Link href="/customers" className="text-lg hover:text-gray-900">
+                Quản lý khách hàng
+              </Link>
+              <ChevronRight className="h-6 w-6" />
+              <span className="text-blue-500 font-medium text-lg">Chi tiết khách hàng</span>
+            </nav>
           </div>
-          <CardContent className="p-6">
+          <div className="p-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               {/* Card 1: Thông tin khách hàng */}
-              <Card className="shadow-md border-gray-200 overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100/50 pb-4">
-                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+              <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-gray-50 to-gray-100/50 pb-4 px-6 pt-6">
+                  <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
                     <div className="p-2 bg-white rounded-lg shadow-sm">
                       <User className="h-4 w-4 text-blue-600" />
                     </div>
                     Thông tin khách hàng
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
+                  </h3>
+                </div>
+                <div className="p-6">
                   <div className="flex items-center gap-4 mb-6 pb-6 border-b">
                     <Avatar className="h-20 w-20 border-2 border-gray-200">
                       <AvatarImage src={client?.avatar || undefined} alt={client?.name} />
@@ -468,61 +578,62 @@ export default function ClientDetailPage() {
                     </Avatar>
                     <div>
                       <h2 className="text-xl font-bold text-gray-900">{client?.name}</h2>
-                      <p className="text-sm text-gray-500 mt-1">ID: {client?.id?.slice?.(0, 8)}...</p>
                     </div>
                   </div>
 
                   <form className="space-y-6">
                     {/* Phone */}
-                    <div className="space-y-2">
-                      <Label htmlFor="client-phone" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <div className="space-y-3">
+                      <label htmlFor="client-phone" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                         <Phone className="h-4 w-4 text-blue-600" />
                         Số điện thoại
-                      </Label>
-                      <Input
+                      </label>
+                      <input
                         id="client-phone"
+                        type="text"
                         value={client?.phone || ""}
                         readOnly
-                        className="bg-gray-50 border-gray-200 text-gray-900 cursor-default"
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 cursor-default"
                       />
                     </div>
 
                     {/* Address */}
                     {client?.address && (
-                      <div className="space-y-2">
-                        <Label htmlFor="client-address" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                      <div className="space-y-3">
+                        <label htmlFor="client-address" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                           <MapPin className="h-4 w-4 text-blue-600" />
                           Địa chỉ
-                        </Label>
-                        <Input
+                        </label>
+                        <input
                           id="client-address"
+                          type="text"
                           value={client?.address || ""}
                           readOnly
-                          className="bg-gray-50 border-gray-200 text-gray-900 cursor-default"
+                          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 cursor-default"
                         />
                       </div>
                     )}
 
                     {/* Points and Status Row */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <Label htmlFor="client-points" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                      <div className="space-y-3">
+                        <label htmlFor="client-points" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                           <Gift className="h-4 w-4 text-green-600" />
                           Điểm tích lũy
-                        </Label>
-                        <div className="bg-gray-50 border-gray-200 rounded-md px-3 py-2">
+                        </label>
+                        <div className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
                           <Badge variant="outline" className="text-base font-semibold">
                             {client?.point || 0} điểm
                           </Badge>
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="client-status" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                      <div className="space-y-3">
+                        <label htmlFor="client-status" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                           <User className="h-4 w-4 text-purple-600" />
                           Trạng thái
-                        </Label>
-                        <div className="bg-gray-50 border-gray-200 rounded-md px-3 py-2">
+                        </label>
+                        <div className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
                           {client?.zaloId ? (
                             <Badge variant="default" className="text-sm">Đã đăng ký</Badge>
                           ) : (
@@ -533,13 +644,14 @@ export default function ClientDetailPage() {
                     </div>
 
                     {/* Created Date */}
-                    <div className="space-y-2">
-                      <Label htmlFor="client-created" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <div className="space-y-3">
+                      <label htmlFor="client-created" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-purple-600" />
                         Ngày tạo
-                      </Label>
-                      <Input
+                      </label>
+                      <input
                         id="client-created"
+                        type="text"
                         value={
                           client?.createdAt
                             ? new Date(client.createdAt).toLocaleDateString("vi-VN", {
@@ -550,24 +662,24 @@ export default function ClientDetailPage() {
                             : "-"
                         }
                         readOnly
-                        className="bg-gray-50 border-gray-200 text-gray-900 cursor-default"
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 cursor-default"
                       />
                     </div>
                   </form>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
 
               {/* Card 2: Thống kê */}
-              <Card className="shadow-md border-gray-200 overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100/50 pb-4">
-                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+              <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-gray-50 to-gray-100/50 pb-4 px-6 pt-6">
+                  <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
                     <div className="p-2 bg-white rounded-lg shadow-sm">
                       <TrendingUp className="h-4 w-4 text-blue-600" />
                     </div>
                     Thống kê
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-8">
+                  </h3>
+                </div>
+                <div className="p-8">
                   <div className="space-y-6">
                     <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
                       <div className="flex items-center justify-between">
@@ -617,19 +729,24 @@ export default function ClientDetailPage() {
                       </div>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </div>
 
             {/* Orders and Vouchers List with Tabs */}
-            <Card className="shadow-md border-gray-200 overflow-hidden">
-              <CardContent className="p-6">
+            <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+              <div className="p-6">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                   <div className="flex items-center justify-between border-b border-gray-200 pb-0">
                     <TabsList className="inline-flex h-auto items-center justify-start rounded-none bg-transparent p-0 gap-6">
                       <TabsTrigger 
                         value="orders" 
-                        className="flex items-center gap-2 rounded-none border-b-2 border-transparent bg-transparent px-0 py-3 text-sm font-medium text-gray-600 transition-none data-[state=active]:border-blue-500 data-[state=active]:text-blue-500 data-[state=active]:shadow-none hover:text-gray-900"
+                        className={`flex items-center gap-2 rounded-none border-b-2 bg-transparent px-0 py-3 text-sm font-medium transition-none hover:text-gray-900 ${
+                          activeTab === "orders" 
+                            ? "border-blue-500 text-blue-500" 
+                            : "border-transparent text-gray-600"
+                        }`}
+                        onClick={() => setActiveTab("orders")}
                       >
                         <Receipt className="h-4 w-4" />
                         Đơn hàng
@@ -641,7 +758,12 @@ export default function ClientDetailPage() {
                       </TabsTrigger>
                       <TabsTrigger 
                         value="vouchers" 
-                        className="flex items-center gap-2 rounded-none border-b-2 border-transparent bg-transparent px-0 py-3 text-sm font-medium text-gray-600 transition-none data-[state=active]:border-blue-500 data-[state=active]:text-blue-500 data-[state=active]:shadow-none hover:text-gray-900"
+                        className={`flex items-center gap-2 rounded-none border-b-2 bg-transparent px-0 py-3 text-sm font-medium transition-none hover:text-gray-900 ${
+                          activeTab === "vouchers" 
+                            ? "border-blue-500 text-blue-500" 
+                            : "border-transparent text-gray-600"
+                        }`}
+                        onClick={() => setActiveTab("vouchers")}
                       >
                         <Gift className="h-4 w-4" />
                         Voucher
@@ -654,73 +776,101 @@ export default function ClientDetailPage() {
                     </TabsList>
                     <div className="flex gap-2">
                       {activeTab === "orders" && (
-                        <Button
-                          size="sm"
-                          className="gap-2 shadow-sm bg-blue-600 hover:bg-blue-700"
+                        <button
+                          className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 !text-white rounded-md shadow-sm flex items-center gap-2"
                           onClick={() => setIsCreateOrderOpen(true)}
                         >
                           <Plus className="h-4 w-4" />
                           Tạo đơn hàng
-                        </Button>
+                        </button>
                       )}
                       {activeTab === "vouchers" && (
-                        <Button
-                          size="sm"
-                          className="gap-2 shadow-sm bg-green-600 hover:bg-green-700"
+                        <button
+                          className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 !text-white rounded-md shadow-sm flex items-center gap-2"
                           onClick={() => setIsRedeemVoucherOpen(true)}
                         >
                           <Plus className="h-4 w-4" />
                           Đổi voucher
-                        </Button>
+                        </button>
                       )}
                     </div>
                   </div>
 
+                  {activeTab === "orders" && (
                   <TabsContent value="orders" className="mt-4">
-                    {isLoadingClient ? (
+                    {isLoadingOrders ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-6 w-6 animate-spin" />
                       </div>
                     ) : orders && orders.length > 0 ? (
                       <div className="border rounded-lg overflow-hidden">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Mã đơn hàng</TableHead>
-                              <TableHead>Trạng thái</TableHead>
-                              <TableHead>Số sản phẩm</TableHead>
-                              <TableHead>Tổng tiền</TableHead>
-                              <TableHead>Ngày tạo</TableHead>
-                              <TableHead className="text-right">Thao tác</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {orders?.map((order: Order) => (
-                              <TableRow key={order?.id}>
-                                <TableCell className="font-medium">
-                                  #{order?.id?.slice?.(0, 8)}...
-                                </TableCell>
-                                <TableCell>{order?.status && getStatusBadge(order.status)}</TableCell>
-                                <TableCell>{order?.items?.length || 0}</TableCell>
-                                <TableCell className="font-medium">
-                                  {order?.totalPrice ? formatPrice(order.totalPrice) : "-"}
-                                </TableCell>
-                                <TableCell>
-                                  {order?.createdAt
-                                    ? new Date(order.createdAt).toLocaleDateString("vi-VN")
-                                    : "-"}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <Link href={`/orders/${order?.id}`}>
-                                    <Button variant="ghost" size="sm">
-                                      Xem chi tiết
-                                    </Button>
-                                  </Link>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse">
+                            <thead>
+                              <tr className="border-b border-gray-200">
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 min-w-[200px] whitespace-nowrap">Mã đơn hàng</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Trạng thái</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Số sản phẩm</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Tổng tiền</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Ngày tạo</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {orders?.map((order: Order) => (
+                                <tr 
+                                  key={order?.id} 
+                                  className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+                                  onClick={() => router.push(`/orders/${order?.id}`)}
+                                >
+                                  <td className="py-3 px-4 font-medium text-gray-900 min-w-[200px]">
+                                    #{order?.id || "-"}
+                                  </td>
+                                  <td className="py-3 px-4">{order?.status && getStatusBadge(order.status)}</td>
+                                  <td className="py-3 px-4 text-gray-700">{order?.items?.length || 0}</td>
+                                  <td className="py-3 px-4 font-medium text-gray-900">
+                                    {order?.totalPrice ? formatPrice(order.totalPrice) : "-"}
+                                  </td>
+                                  <td className="py-3 px-4 text-gray-700">
+                                    {order?.createdAt
+                                      ? new Date(order.createdAt).toLocaleDateString("vi-VN")
+                                      : "-"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {/* Pagination */}
+                        {orderPaginationMeta && orderPaginationMeta.totalPages > 1 && (
+                          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm text-gray-700">
+                                Hiển thị {((orderPaginationMeta.page - 1) * orderPaginationMeta.pageSize) + 1} - {Math.min(orderPaginationMeta.page * orderPaginationMeta.pageSize, orderPaginationMeta.total)} trong tổng số {orderPaginationMeta.total} đơn hàng
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setOrderPage(p => Math.max(1, p - 1))}
+                                  disabled={orderPage <= 1 || isLoadingOrders}
+                                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                >
+                                  <ChevronRight className="h-4 w-4 rotate-180" />
+                                  Trước
+                                </button>
+                                <span className="text-sm text-gray-700 px-3">
+                                  Trang {orderPaginationMeta.page} / {orderPaginationMeta.totalPages}
+                                </span>
+                                <button
+                                  onClick={() => setOrderPage(p => Math.min(orderPaginationMeta.totalPages, p + 1))}
+                                  disabled={orderPage >= orderPaginationMeta.totalPages || isLoadingOrders}
+                                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                >
+                                  Sau
+                                  <ChevronRight className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="text-center py-16 text-gray-500">
@@ -732,76 +882,94 @@ export default function ClientDetailPage() {
                       </div>
                     )}
                   </TabsContent>
+                  )}
 
+                  {activeTab === "vouchers" && (
                   <TabsContent value="vouchers" className="mt-4">
                     {isLoadingClientVouchers ? (
                       <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
                       </div>
                     ) : clientVouchers && Array.isArray(clientVouchers) && clientVouchers.length > 0 ? (
                       <div className="border rounded-lg overflow-hidden">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Tên voucher</TableHead>
-                              <TableHead>Mô tả</TableHead>
-                              <TableHead>Loại</TableHead>
-                              <TableHead>Giá trị</TableHead>
-                              <TableHead>Trạng thái</TableHead>
-                              <TableHead>Ngày đổi</TableHead>
-                              <TableHead>Hạn sử dụng</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {clientVouchers.map((clientVoucher: ClientVoucher) => (
-                              <TableRow key={clientVoucher.id}>
-                                <TableCell className="font-medium">{clientVoucher.voucher?.name}</TableCell>
-                                <TableCell className="max-w-[300px]">
-                                  <div className="text-sm text-gray-600 line-clamp-2">
-                                    {clientVoucher.voucher?.description || (
-                                      <span className="text-gray-400 italic">
-                                        Giảm {clientVoucher.voucher?.type === "FIXED" 
-                                          ? formatPrice(clientVoucher.voucher?.price || 0)
-                                          : `${clientVoucher.voucher?.percent}%${clientVoucher.voucher?.hasMaxPrice && clientVoucher.voucher?.maxPrice ? ` (tối đa ${formatPrice(clientVoucher.voucher.maxPrice)})` : ""}`
-                                        }
-                                        {clientVoucher.voucher?.minApply && clientVoucher.voucher.minApply > 0 
-                                          ? ` cho đơn từ ${formatPrice(clientVoucher.voucher.minApply)}`
-                                          : " cho mọi đơn hàng"
-                                        }
-                                      </span>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant={clientVoucher.voucher?.type === "FIXED" ? "default" : "secondary"}>
-                                    {clientVoucher.voucher?.type === "FIXED" ? "Cố định" : "Phần trăm"}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  {clientVoucher.voucher?.type === "FIXED" 
-                                    ? formatPrice(clientVoucher.voucher?.price || 0)
-                                    : `${clientVoucher.voucher?.percent}%${clientVoucher.voucher?.hasMaxPrice && clientVoucher.voucher?.maxPrice ? ` (tối đa ${formatPrice(clientVoucher.voucher.maxPrice)})` : ""}`
-                                  }
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant={clientVoucher.isUsed ? "secondary" : "default"}>
-                                    {clientVoucher.isUsed ? "Đã sử dụng" : "Chưa sử dụng"}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  {clientVoucher.createdAt 
-                                    ? new Date(clientVoucher.createdAt).toLocaleDateString("vi-VN")
-                                    : "-"}
-                                </TableCell>
-                                <TableCell>
-                                  {clientVoucher.voucher?.useEnd 
-                                    ? new Date(clientVoucher.voucher.useEnd).toLocaleDateString("vi-VN")
-                                    : "Không giới hạn"}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse">
+                            <thead>
+                              <tr className="border-b border-gray-200">
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Tên voucher</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Mô tả</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Loại</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Giá trị</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Giá trị tối thiểu</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Giá trị tối đa</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Trạng thái</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Ngày đổi</th>
+                                <th className="text-left py-3 px-4 font-medium text-gray-700 whitespace-nowrap">Hạn sử dụng</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {clientVouchers.map((clientVoucher: ClientVoucher) => (
+                                <tr key={clientVoucher.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                  <td className="py-3 px-4 font-medium text-gray-900">{clientVoucher.voucher?.name}</td>
+                                  <td className="py-3 px-4 max-w-[300px]">
+                                    <div className="text-sm text-gray-600 line-clamp-2">
+                                      {clientVoucher.voucher?.description || (
+                                        <span className="text-gray-400 italic">
+                                          Giảm {clientVoucher.voucher?.type === "FIXED" 
+                                            ? formatPrice(clientVoucher.voucher?.price || 0)
+                                            : `${clientVoucher.voucher?.percent}%${clientVoucher.voucher?.hasMaxPrice && clientVoucher.voucher?.maxPrice ? ` (tối đa ${formatPrice(clientVoucher.voucher.maxPrice)})` : ""}`
+                                          }
+                                          {clientVoucher.voucher?.minApply && clientVoucher.voucher.minApply > 0 
+                                            ? ` cho đơn từ ${formatPrice(clientVoucher.voucher.minApply)}`
+                                            : " cho mọi đơn hàng"
+                                          }
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4">
+                                    <Badge variant={clientVoucher.voucher?.type === "FIXED" ? "default" : "secondary"}>
+                                      {clientVoucher.voucher?.type === "FIXED" ? "Cố định" : "Phần trăm"}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-3 px-4 text-gray-700">
+                                    {clientVoucher.voucher?.type === "FIXED" 
+                                      ? formatPrice(clientVoucher.voucher?.price || 0)
+                                      : `${clientVoucher.voucher?.percent}%`
+                                    }
+                                  </td>
+                                  <td className="py-3 px-4 text-gray-700">
+                                    {clientVoucher.voucher?.minApply && clientVoucher.voucher.minApply > 0
+                                      ? formatPrice(clientVoucher.voucher.minApply)
+                                      : "-"
+                                    }
+                                  </td>
+                                  <td className="py-3 px-4 text-gray-700">
+                                    {clientVoucher.voucher?.hasMaxPrice && clientVoucher.voucher?.maxPrice
+                                      ? formatPrice(clientVoucher.voucher.maxPrice)
+                                      : "-"
+                                    }
+                                  </td>
+                                  <td className="py-3 px-4">
+                                    <Badge variant={clientVoucher.isUsed ? "secondary" : "default"}>
+                                      {clientVoucher.isUsed ? "Đã sử dụng" : "Chưa sử dụng"}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-3 px-4 text-gray-700">
+                                    {clientVoucher.createdAt 
+                                      ? new Date(clientVoucher.createdAt).toLocaleDateString("vi-VN")
+                                      : "-"}
+                                  </td>
+                                  <td className="py-3 px-4 text-gray-700">
+                                    {clientVoucher.voucher?.useEnd 
+                                      ? new Date(clientVoucher.voucher.useEnd).toLocaleDateString("vi-VN")
+                                      : "Không giới hạn"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     ) : (
                       <div className="text-center py-16 text-gray-500">
@@ -813,45 +981,42 @@ export default function ClientDetailPage() {
                       </div>
                     )}
                   </TabsContent>
+                  )}
                 </Tabs>
-              </CardContent>
-            </Card>
-          </CardContent>
-        </Card>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Create Order Dialog */}
-        <Dialog open={isCreateOrderOpen} onOpenChange={(open) => {
-          setIsCreateOrderOpen(open)
-          if (!open) {
-            reset({ items: [], clientVoucherId: undefined })
+        <Modal
+          open={isCreateOrderOpen}
+          onClose={() => {
+            setIsCreateOrderOpen(false)
+            reset({ items: [], clientVoucherId: undefined, paymentMethod: "CASH" })
             setQuantityInputValues({})
             setProductSearchValues({})
             setProductPopoverOpen({})
             setComboSearchValues({})
             setComboPopoverOpen({})
-          }
-        }}>
-          <DialogContent className="sm:max-w-[1000px] max-h-[95vh] min-h-[750px] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-semibold text-center">Tạo đơn hàng mới</DialogTitle>
-              <DialogDescription className="text-center">
-                Thêm sản phẩm và combo vào đơn hàng cho khách hàng này
-              </DialogDescription>
-            </DialogHeader>
+          }}
+          title="Tạo đơn hàng mới"
+          description="Thêm sản phẩm và combo vào đơn hàng cho khách hàng này"
+          className="sm:max-w-[1000px] min-h-[750px]"
+        >
             <form onSubmit={handleSubmit(onSubmitOrder)} className="space-y-4">
               {/* Order Items */}
               <div className="space-y-4 ">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-semibold">Sản phẩm <span className="text-red-500">*</span></Label>
-                  <Button
+                  <label className="text-sm font-semibold text-gray-700">Sản phẩm <span className="text-red-500">*</span></label>
+                  <button
                     type="button"
-                    variant="outline"
-                    size="sm"
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 flex items-center gap-2"
                     onClick={() => append({ productId: "", comboId: "", quantity: 1 })}
                   >
-                    <Plus className="mr-2 h-3 w-3" />
+                    <Plus className="h-3 w-3" />
                     Thêm sản phẩm
-                  </Button>
+                  </button>
                 </div>
 
                 <div className="space-y-3 h-[350px] overflow-y-auto" id="order-items-scroll-container">
@@ -870,11 +1035,30 @@ export default function ClientDetailPage() {
                       return (
                         <div key={field.id} data-item-index={index} className="p-4 border rounded-lg bg-gray-50/50">
                           <div className="grid grid-cols-12 gap-3">
-                            <div className="col-span-12 md:col-span-4 space-y-2">
-                              <Label className="text-xs font-medium text-gray-700">Sản phẩm</Label>
+                            {/* Labels row */}
+                            <div className="col-span-12 md:col-span-4">
+                              <label className="text-xs font-medium text-gray-700 block mb-2">Sản phẩm</label>
+                            </div>
+                            <div className="col-span-12 md:col-span-3">
+                              <label className="text-xs font-medium text-gray-700 block mb-2">Combo</label>
+                            </div>
+                            <div className="col-span-12 md:col-span-2">
+                              <label className="text-xs font-medium text-gray-700 block mb-2">Số lượng</label>
+                            </div>
+                            <div className="col-span-12 md:col-span-2">
+                              <label className="text-xs font-medium text-gray-700 block mb-2 text-center">Giá</label>
+                            </div>
+                            <div className="col-span-12 md:col-span-1">
+                              <label className="text-xs font-medium text-gray-700 block mb-2 opacity-0">Xóa</label>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-12 gap-3 items-start">
+                            <div className="col-span-12 md:col-span-4">
                               <div className="relative">
-                                <Input
+                                <input
+                                  type="text"
                                   placeholder="Tìm kiếm sản phẩm"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-9 pr-8"
                                   value={
                                     productSearchValues[index] !== undefined
                                       ? productSearchValues[index]
@@ -911,7 +1095,6 @@ export default function ClientDetailPage() {
                                     // Tự động mở popover khi focus vào input
                                     setProductPopoverOpen(prev => ({ ...prev, [index]: true }))
                                   }}
-                                  className="h-9 pr-8"
                                 />
                                 <button
                                   type="button"
@@ -927,7 +1110,16 @@ export default function ClientDetailPage() {
                                 {/* Custom Dropdown với absolute positioning */}
                                 {productPopoverOpen[index] && (
                                   <div className="absolute z-50 w-full mt-1 rounded-md border bg-white shadow-lg max-h-[300px] overflow-y-auto">
-                                    {productsWithCombos.filter((product: Product) => {
+                                    {isLoadingProducts ? (
+                                      <div className="p-4 text-center text-sm text-gray-500">
+                                        <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+                                        Đang tải sản phẩm...
+                                      </div>
+                                    ) : productsWithCombos.length === 0 ? (
+                                      <div className="p-4 text-center text-sm text-gray-500">
+                                        Không có sản phẩm nào.
+                                      </div>
+                                    ) : productsWithCombos.filter((product: Product) => {
                                       const searchValue = productSearchValues[index]?.toLowerCase() || ""
                                       if (!searchValue) return true
                                       return product?.name?.toLowerCase().includes(searchValue)
@@ -1004,11 +1196,12 @@ export default function ClientDetailPage() {
                                 <p className="text-xs text-red-500 mt-1">{errors.items[index]?.productId?.message}</p>
                               )}
                             </div>
-                            <div className="col-span-12 md:col-span-3 space-y-2">
-                              <Label className="text-xs font-medium text-gray-700">Combo</Label>
+                            <div className="col-span-12 md:col-span-3">
                               <div className="relative">
-                                <Input
+                                <input
+                                  type="text"
                                   placeholder={!selectedProductId ? "Chọn sản phẩm trước" : availableCombos.length === 0 ? "Không có combo" : "Tìm kiếm combo"}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-9 pr-8 disabled:opacity-50 disabled:cursor-not-allowed"
                                   value={
                                     comboSearchValues[index] !== undefined
                                       ? comboSearchValues[index]
@@ -1042,7 +1235,6 @@ export default function ClientDetailPage() {
                                     }
                                   }}
                                   disabled={!selectedProductId || availableCombos.length === 0}
-                                  className="h-9 pr-8"
                                 />
                                 <button
                                   type="button"
@@ -1139,12 +1331,13 @@ export default function ClientDetailPage() {
                                 <p className="text-xs text-red-500 mt-1">{errors.items[index]?.comboId?.message}</p>
                               )}
                             </div>
-                            <div className="col-span-12 md:col-span-2 space-y-2">
-                              <Label className="text-xs font-medium text-gray-700">Số lượng</Label>
-                              <Input
+                            <div className="col-span-12 md:col-span-2">
+                              <input
                                 type="text"
-                                placeholder="Số lượng"
+                                placeholder={!watch(`items.${index}.comboId`) ? "Chọn combo trước" : "Số lượng"}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-9 disabled:opacity-50 disabled:cursor-not-allowed"
                                 value={quantityInputValues[index] !== undefined ? quantityInputValues[index] : (watch(`items.${index}.quantity`)?.toString() || "")}
+                                disabled={!watch(`items.${index}.comboId`)}
                                 onChange={(e) => {
                                   const value = e.target.value
                                   // Chỉ cho phép số, cho phép rỗng để user có thể xóa hết
@@ -1200,7 +1393,6 @@ export default function ClientDetailPage() {
                                     })
                                   }
                                 }}
-                                className="h-9"
                               />
                               <input
                                 type="hidden"
@@ -1214,13 +1406,12 @@ export default function ClientDetailPage() {
                                 <p className="text-xs text-red-500 mt-1">{errors.items[index]?.quantity?.message}</p>
                               )}
                             </div>
-                            <div className="col-span-12 md:col-span-2 space-y-2 text-center">
-                              <Label className="text-xs font-medium text-gray-700">Giá</Label>
+                            <div className="col-span-12 md:col-span-2 text-center">
                               {watch(`items.${index}.comboId`) ? (() => {
                                 const selectedCombo = availableCombos.find((c) => c.id === watch(`items.${index}.comboId`))
                                 if (!selectedCombo) {
                                   return (
-                                    <div className="h-9 flex items-center text-sm text-gray-400">
+                                    <div className="h-9 flex items-center text-sm text-gray-400 pl-8">
                                       Chọn combo
                                     </div>
                                   )
@@ -1238,16 +1429,15 @@ export default function ClientDetailPage() {
                                   </div>
                                 )
                               })() : (
-                                <div className="h-9 flex items-center text-sm text-gray-400">
+                                <div className="h-9 flex items-center text-sm text-gray-400 pl-8">
                                   Chọn combo
                                 </div>
                               )}
                             </div>
-                            <div className="col-span-12 md:col-span-1 flex items-end">
-                              <Button
+                            <div className="col-span-12 md:col-span-1">
+                              <button
                                 type="button"
-                                variant="ghost"
-                                size="icon"
+                                className="p-2 text-gray-400 hover:text-red-500 rounded-md transition-colors h-9 w-9 flex items-center justify-center"
                                 onClick={() => {
                                   remove(index)
                                   // Update quantityInputValues after remove
@@ -1316,10 +1506,9 @@ export default function ClientDetailPage() {
                                     return newValues
                                   })
                                 }}
-                                className="h-9 w-9 text-gray-400 hover:text-red-500"
                               >
                                 <Trash2 className="h-4 w-4" />
-                              </Button>
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1332,7 +1521,7 @@ export default function ClientDetailPage() {
               {/* Voucher Selection */}
               {fields.length > 0 && (
                 <div className="space-y-3 border-t pt-4">
-                  <Label htmlFor="clientVoucher">Voucher trong ví (tùy chọn)</Label>
+                  <label htmlFor="clientVoucher" className="text-sm font-medium text-gray-700 block">Voucher trong ví (tùy chọn)</label>
                   {(() => {
                     // Filter vouchers based on order subtotal and minApply condition
                     const availableClientVouchers = Array.isArray(clientVouchers) 
@@ -1356,8 +1545,8 @@ export default function ClientDetailPage() {
                     // If voucher is selected, only show preview card
                     if (selectedClientVoucher) {
                       return (
-                        <Card className="border-2 border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50">
-                          <CardContent className="p-4">
+                        <div className="border-2 border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg">
+                          <div className="p-4">
                             <div className="flex items-center gap-3">
                               <div className="p-2 bg-white rounded-lg shadow-sm flex-shrink-0">
                                 <Gift className="h-5 w-5 text-purple-600" />
@@ -1382,18 +1571,16 @@ export default function ClientDetailPage() {
                                 </p>
                                
                               </div>
-                              <Button
+                              <button
                                 type="button"
-                                variant="ghost"
-                                size="icon"
+                                className="p-2 text-gray-400 hover:text-red-500 rounded-md transition-colors flex-shrink-0"
                                 onClick={() => setValue("clientVoucherId", undefined)}
-                                className="h-10 w-10 text-gray-400 hover:text-red-500 flex-shrink-0 cursor-pointer"
                               >
-                                <Trash2 className="h-10 w-10" />
-                              </Button>
+                                <Trash2 className="h-5 w-5" />
+                              </button>
                             </div>
-                          </CardContent>
-                        </Card>
+                          </div>
+                        </div>
                       )
                     }
                     
@@ -1407,49 +1594,23 @@ export default function ClientDetailPage() {
                             : "Không có voucher trong ví."
                         }
                       </div>
-                    ) : (
-                      <Select
-                        value={watch("clientVoucherId") || undefined}
-                        onValueChange={(value) => {
-                          setValue("clientVoucherId", value || undefined)
+                      ) : (
+                      <select
+                        value={watch("clientVoucherId") || ""}
+                        onChange={(e) => {
+                          setValue("clientVoucherId", e.target.value || undefined)
                         }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Chọn voucher trong ví (tùy chọn)" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[350px]">
-                          {availableClientVouchers.map((clientVoucher: ClientVoucher) => (
-                            <SelectItem 
-                              key={clientVoucher.id} 
-                              value={clientVoucher.id}
-                              className="px-0 py-0 h-auto cursor-pointer"
-                            >
-                              <div className="flex items-start gap-3 w-full p-3 cursor-pointer">
-                                <Gift className="h-5 w-5 text-purple-600 flex-shrink-0 mt-0.5" />
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-semibold text-gray-900 text-base mb-1">
-                                    {clientVoucher.voucher?.name}
-                                  </div>
-                                  <p className="text-sm text-gray-600 leading-relaxed">
-                                    {clientVoucher.voucher?.description || (
-                                      <>
-                                        Giảm {clientVoucher.voucher?.type === "FIXED" 
-                                          ? formatPrice(clientVoucher.voucher?.price || 0)
-                                          : `${clientVoucher.voucher?.percent}%${clientVoucher.voucher?.hasMaxPrice && clientVoucher.voucher?.maxPrice ? ` (tối đa ${formatPrice(clientVoucher.voucher.maxPrice)})` : ""}`
-                                        }
-                                        {clientVoucher.voucher?.minApply && clientVoucher.voucher.minApply > 0 
-                                          ? ` cho đơn từ ${formatPrice(clientVoucher.voucher.minApply)}`
-                                          : " cho mọi đơn hàng"
-                                        }
-                                      </>
-                                    )}
-                                  </p>
-                                </div>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <option value="">Chọn voucher trong ví (tùy chọn)</option>
+                        {availableClientVouchers.map((clientVoucher: ClientVoucher) => (
+                          <option key={clientVoucher.id} value={clientVoucher.id}>
+                            {clientVoucher.voucher?.name} - {clientVoucher.voucher?.type === "FIXED" 
+                              ? formatPrice(clientVoucher.voucher?.price || 0)
+                              : `${clientVoucher.voucher?.percent}%`}
+                          </option>
+                        ))}
+                      </select>
                     )
                   })()}
                 </div>
@@ -1483,51 +1644,70 @@ export default function ClientDetailPage() {
                 </div>
               )}
 
+              {/* Payment Method */}
+              <div className="pt-4 border-t">
+                <label className="text-sm font-semibold text-gray-700 block mb-2">
+                  Phương thức thanh toán
+                </label>
+                <select
+                  {...register("paymentMethod")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  defaultValue="CASH"
+                >
+                  <option value="CASH">Tiền mặt</option>
+                  <option value="TRANSFER">Chuyển khoản</option>
+                </select>
+              </div>
+
               <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button
+                <button
                   type="button"
-                  variant="outline"
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={() => {
                     setIsCreateOrderOpen(false)
-                    reset({ items: [], clientVoucherId: undefined })
+                    reset({ items: [], clientVoucherId: undefined, paymentMethod: "CASH" })
                   }}
                   disabled={createOrderMutation.isPending}
                 >
                   Hủy
-                </Button>
-                <Button type="submit" disabled={createOrderMutation.isPending}>
-                  {createOrderMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 !text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  disabled={createOrderMutation.isPending}
+                >
+                  {createOrderMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Tạo đơn hàng
-                </Button>
+                </button>
               </div>
             </form>
-          </DialogContent>
-        </Dialog>
+        </Modal>
 
         {/* Create Voucher Dialog */}
-        <Dialog open={isCreateVoucherOpen} onOpenChange={(open) => {
-          setIsCreateVoucherOpen(open)
-          if (!open) {
+        <Modal
+          open={isCreateVoucherOpen}
+          onClose={() => {
+            setIsCreateVoucherOpen(false)
             resetVoucher({
               type: "FIXED",
               isActive: true,
               isRedeemable: true,
               quantity: 0,
             })
-          }
-        }}>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-semibold text-center">Tạo voucher mới</DialogTitle>
-              <DialogDescription className="text-center">
-                Tạo voucher mới để khách hàng có thể sử dụng hoặc đổi bằng điểm
-              </DialogDescription>
-            </DialogHeader>
+          }}
+          title="Tạo voucher mới"
+          description="Tạo voucher mới để khách hàng có thể sử dụng hoặc đổi bằng điểm"
+          className="sm:max-w-[600px] max-h-[90vh]"
+        >
             <form onSubmit={handleSubmitVoucher(onSubmitVoucher)} className="space-y-4">
               <div>
-                <Label htmlFor="voucher-name">Tên voucher <span className="text-red-500">*</span></Label>
-                <Input
+                <label htmlFor="voucher-name" className="text-sm font-medium text-gray-700 block mb-1">
+                  Tên voucher <span className="text-red-500">*</span>
+                </label>
+                <input
                   id="voucher-name"
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   {...registerVoucher("name", { required: "Tên voucher là bắt buộc" })}
                 />
                 {errorsVoucher.name && (
@@ -1536,36 +1716,41 @@ export default function ClientDetailPage() {
               </div>
 
               <div>
-                <Label htmlFor="voucher-description">Mô tả</Label>
-                <Textarea
+                <label htmlFor="voucher-description" className="text-sm font-medium text-gray-700 block mb-1">
+                  Mô tả
+                </label>
+                <textarea
                   id="voucher-description"
-                  {...registerVoucher("description")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={3}
+                  {...registerVoucher("description")}
                 />
               </div>
 
               <div>
-                <Label htmlFor="voucher-type">Loại voucher <span className="text-red-500">*</span></Label>
-                <Select
+                <label htmlFor="voucher-type" className="text-sm font-medium text-gray-700 block mb-1">
+                  Loại voucher <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="voucher-type"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   value={voucherType}
-                  onValueChange={(value: VoucherType) => setValueVoucher("type", value)}
+                  onChange={(e) => setValueVoucher("type", e.target.value as VoucherType)}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="FIXED">Giảm giá cố định</SelectItem>
-                    <SelectItem value="PERCENT">Giảm giá theo %</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <option value="FIXED">Giảm giá cố định</option>
+                  <option value="PERCENT">Giảm giá theo %</option>
+                </select>
               </div>
 
               {voucherType === "FIXED" ? (
                 <div>
-                  <Label htmlFor="voucher-price">Giá giảm (VND) <span className="text-red-500">*</span></Label>
-                  <Input
+                  <label htmlFor="voucher-price" className="text-sm font-medium text-gray-700 block mb-1">
+                    Giá giảm (VND) <span className="text-red-500">*</span>
+                  </label>
+                  <input
                     id="voucher-price"
                     type="number"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     {...registerVoucher("price", { 
                       required: "Giá giảm là bắt buộc",
                       valueAsNumber: true,
@@ -1579,10 +1764,13 @@ export default function ClientDetailPage() {
               ) : (
                 <>
                   <div>
-                    <Label htmlFor="voucher-percent">Phần trăm giảm (%) <span className="text-red-500">*</span></Label>
-                    <Input
+                    <label htmlFor="voucher-percent" className="text-sm font-medium text-gray-700 block mb-1">
+                      Phần trăm giảm (%) <span className="text-red-500">*</span>
+                    </label>
+                    <input
                       id="voucher-percent"
                       type="number"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       {...registerVoucher("percent", { 
                         required: "Phần trăm giảm là bắt buộc",
                         valueAsNumber: true,
@@ -1595,10 +1783,13 @@ export default function ClientDetailPage() {
                     )}
                   </div>
                   <div>
-                    <Label htmlFor="voucher-maxPrice">Giảm tối đa (VND)</Label>
-                    <Input
+                    <label htmlFor="voucher-maxPrice" className="text-sm font-medium text-gray-700 block mb-1">
+                      Giảm tối đa (VND)
+                    </label>
+                    <input
                       id="voucher-maxPrice"
                       type="number"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       {...registerVoucher("maxPrice", { valueAsNumber: true })}
                     />
                   </div>
@@ -1606,19 +1797,25 @@ export default function ClientDetailPage() {
               )}
 
               <div>
-                <Label htmlFor="voucher-minApply">Giá trị đơn hàng tối thiểu (VND)</Label>
-                <Input
+                <label htmlFor="voucher-minApply" className="text-sm font-medium text-gray-700 block mb-1">
+                  Giá trị đơn hàng tối thiểu (VND)
+                </label>
+                <input
                   id="voucher-minApply"
                   type="number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   {...registerVoucher("minApply", { valueAsNumber: true })}
                 />
               </div>
 
               <div>
-                <Label htmlFor="voucher-quantity">Số lượng</Label>
-                <Input
+                <label htmlFor="voucher-quantity" className="text-sm font-medium text-gray-700 block mb-1">
+                  Số lượng
+                </label>
+                <input
                   id="voucher-quantity"
                   type="number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   {...registerVoucher("quantity", { valueAsNumber: true, min: 0 })}
                 />
               </div>
@@ -1630,15 +1827,20 @@ export default function ClientDetailPage() {
                   {...registerVoucher("isRedeemable")}
                   className="h-4 w-4 rounded border-gray-300"
                 />
-                <Label htmlFor="voucher-isRedeemable">Cho phép đổi điểm</Label>
+                <label htmlFor="voucher-isRedeemable" className="text-sm font-medium text-gray-700">
+                  Cho phép đổi điểm
+                </label>
               </div>
 
               {watchVoucher("isRedeemable") && (
                 <div>
-                  <Label htmlFor="voucher-pointsRequired">Điểm cần để đổi <span className="text-red-500">*</span></Label>
-                  <Input
+                  <label htmlFor="voucher-pointsRequired" className="text-sm font-medium text-gray-700 block mb-1">
+                    Điểm cần để đổi <span className="text-red-500">*</span>
+                  </label>
+                  <input
                     id="voucher-pointsRequired"
                     type="number"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     {...registerVoucher("pointsRequired", { 
                       required: watchVoucher("isRedeemable") ? "Điểm cần để đổi là bắt buộc khi cho phép đổi điểm" : false,
                       valueAsNumber: true, 
@@ -1652,9 +1854,9 @@ export default function ClientDetailPage() {
               )}
 
               <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button
+                <button
                   type="button"
-                  variant="outline"
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={() => {
                     setIsCreateVoucherOpen(false)
                     resetVoucher({
@@ -1667,42 +1869,44 @@ export default function ClientDetailPage() {
                   disabled={createVoucherMutation.isPending}
                 >
                   Hủy
-                </Button>
-                <Button type="submit" disabled={createVoucherMutation.isPending}>
-                  {createVoucherMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 !text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  disabled={createVoucherMutation.isPending}
+                >
+                  {createVoucherMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Tạo voucher
-                </Button>
+                </button>
               </div>
             </form>
-          </DialogContent>
-        </Dialog>
+        </Modal>
 
         {/* Redeem Voucher Dialog */}
-        <Dialog open={isRedeemVoucherOpen} onOpenChange={(open) => {
-          setIsRedeemVoucherOpen(open)
-          if (!open) {
+        <Modal
+          open={isRedeemVoucherOpen}
+          onClose={() => {
+            setIsRedeemVoucherOpen(false)
             resetRedeem()
             setVoucherSearchValue("")
             setVoucherPopoverOpen(false)
+          }}
+          title={
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg">
+                <Gift className="h-5 w-5 text-purple-600" />
+              </div>
+              Đổi voucher cho khách hàng
+            </div>
           }
-        }}>
-          <DialogContent className="sm:max-w-[750px] max-h-[90vh] min-h-[500px]">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-semibold flex items-center gap-2">
-                <div className="p-2 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg">
-                  <Gift className="h-5 w-5 text-purple-600" />
-                </div>
-                Đổi voucher cho khách hàng
-              </DialogTitle>
-              <DialogDescription>
-                Chọn voucher để đổi bằng điểm tích lũy của khách hàng
-              </DialogDescription>
-            </DialogHeader>
+          description="Chọn voucher để đổi bằng điểm tích lũy của khách hàng"
+          className="sm:max-w-[750px] min-h-[700px]"
+        >
             <form onSubmit={handleSubmitRedeem(onSubmitRedeem)} className="space-y-6">
               {/* Points Display Card */}
               {client && (
-                <Card className="bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
-                  <CardContent className="p-4">
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg">
+                  <div className="p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-white rounded-lg shadow-sm">
@@ -1719,16 +1923,16 @@ export default function ClientDetailPage() {
                         <Sparkles className="h-5 w-5" />
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               )}
 
               {/* Voucher Selection */}
               <div className="space-y-3">
-                <Label htmlFor="redeem-voucherId" className="text-base font-semibold flex items-center gap-2">
+                <label htmlFor="redeem-voucherId" className="text-base font-semibold flex items-center gap-2">
                   <Gift className="h-4 w-4 text-purple-600" />
                   Chọn voucher <span className="text-red-500">*</span>
-                </Label>
+                </label>
                 <Controller
                   name="voucherId"
                   control={controlRedeem}
@@ -1754,7 +1958,8 @@ export default function ClientDetailPage() {
                     return (
                       <div className="space-y-3">
                         <div className="relative" data-voucher-dropdown>
-                          <Input
+                          <input
+                            type="text"
                             placeholder="Tìm kiếm voucher theo tên"
                             value={
                               voucherSearchValue !== undefined
@@ -1782,7 +1987,7 @@ export default function ClientDetailPage() {
                               // Tự động mở popover khi focus vào input
                               setVoucherPopoverOpen(true)
                             }}
-                            className="w-full h-12 border-2 border-gray-200 hover:border-purple-300 focus:border-purple-500 pr-10"
+                            className="w-full h-12 px-3 py-2 border-2 border-gray-200 hover:border-purple-300 focus:border-purple-500 rounded-md focus:outline-none pr-10"
                           />
                           <button
                             type="button"
@@ -1797,7 +2002,7 @@ export default function ClientDetailPage() {
                           
                           {/* Custom Dropdown với absolute positioning */}
                           {voucherPopoverOpen && (
-                            <div className="absolute z-50 w-full mt-1 rounded-md border bg-white shadow-lg max-h-[400px] overflow-y-auto">
+                            <div className="absolute z-50 w-full mt-1 rounded-md border bg-white shadow-lg max-h-[250px] overflow-y-auto">
                               {filteredVouchers.length > 0 ? (
                                 <div className="p-2 space-y-1.5">
                                   {filteredVouchers.map((voucher: Voucher) => (
@@ -1902,8 +2107,8 @@ export default function ClientDetailPage() {
                         
                         {/* Selected Voucher Preview */}
                         {field.value && availableVouchers.find((v: Voucher) => v.id === field.value) && (
-                          <Card className="mt-3 border-2 border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50">
-                            <CardContent className="p-4">
+                          <div className="mt-3 border-2 border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg">
+                            <div className="p-4">
                               {(() => {
                                 const selectedVoucher = availableVouchers.find((v: Voucher) => v.id === field.value)
                                 if (!selectedVoucher) return null
@@ -1932,8 +2137,8 @@ export default function ClientDetailPage() {
                                   </div>
                                 )
                               })()}
-                            </CardContent>
-                          </Card>
+                            </div>
+                          </div>
                         )}
                       </div>
                     )
@@ -1950,39 +2155,37 @@ export default function ClientDetailPage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button
+                <button
                   type="button"
-                  variant="outline"
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]"
                   onClick={() => {
                     setIsRedeemVoucherOpen(false)
                     resetRedeem()
                   }}
                   disabled={redeemVoucherMutation.isPending}
-                  className="min-w-[100px]"
                 >
                   Hủy
-                </Button>
-                <Button 
-                  type="submit" 
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 !text-white rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 min-w-[140px]"
                   disabled={redeemVoucherMutation.isPending}
-                  className="min-w-[140px] bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                 >
                   {redeemVoucherMutation.isPending ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                       Đang xử lý...
                     </>
                   ) : (
                     <>
-                      <Gift className="mr-2 h-4 w-4" />
+                      <Gift className="h-4 w-4" />
                       Đổi voucher
                     </>
                   )}
-                </Button>
+                </button>
               </div>
             </form>
-          </DialogContent>
-        </Dialog>
+        </Modal>
       </div>
     </DashboardLayout>
   )

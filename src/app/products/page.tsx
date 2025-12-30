@@ -88,7 +88,7 @@ export default function ProductsPage() {
       if (statusFilter !== "all") {
         params.status = statusFilter
       }
-      return productsApi.getAll(params)
+      return productsApi.getPaginated(params)
     },
   })
 

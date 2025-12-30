@@ -1,16 +1,16 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { useQuery } from "@tanstack/react-query"
-import { inventoryProductsApi, InventoryProduct } from "@/services/api/inventory-products"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { inventoryProductsApi, InventoryProduct, UpdateInventoryProductDto } from "@/services/api/inventory-products"
+import { categoriesApi, Category } from "@/services/api/categories"
 import DashboardLayout from "@/components/dashboard-layout"
 import {
   Breadcrumb,
   Button,
   Card,
   Col,
-  Descriptions,
   Input,
   Row,
   Space,
@@ -20,24 +20,87 @@ import {
   Typography,
   Skeleton,
   Tabs,
+  Select,
+  Switch,
+  Modal,
+  Form,
 } from "antd"
 import type { ColumnsType } from "antd/es/table"
-import { ArrowLeftOutlined, ExclamationCircleOutlined, FileTextOutlined, EditOutlined } from "@ant-design/icons"
+import { ArrowLeftOutlined, ExclamationCircleOutlined, FileTextOutlined, EditOutlined, AppstoreOutlined, TagOutlined, CalendarOutlined, CheckCircleOutlined, SaveOutlined } from "@ant-design/icons"
+import { toast } from "sonner"
 
-const { Title, Text } = Typography
+const { Text } = Typography
 type ItemsTab = "all" | "valid" | "expired"
 
 export default function InventoryProductDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const productId = params?.id as string
   const [itemsTab, setItemsTab] = useState<ItemsTab>("all")
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [editForm] = Form.useForm<UpdateInventoryProductDto>()
 
   const { data: product, isLoading } = useQuery<InventoryProduct>({
     queryKey: ["inventory-product-detail", productId],
     queryFn: () => inventoryProductsApi.getById(productId),
     enabled: !!productId,
   })
+
+  const { data: categoriesResponse } = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => categoriesApi.getAll(),
+  })
+
+  const categories = useMemo(() => {
+    if (!categoriesResponse) return []
+    if (Array.isArray(categoriesResponse)) return categoriesResponse
+    if ("data" in categoriesResponse && categoriesResponse.data && "data" in categoriesResponse.data) {
+      const inner = (categoriesResponse as any).data
+      if (Array.isArray(inner.data)) return inner.data
+    }
+    if ("data" in categoriesResponse && Array.isArray((categoriesResponse as any).data)) {
+      return (categoriesResponse as any).data
+    }
+    return []
+  }, [categoriesResponse])
+
+  const updateMutation = useMutation({
+    mutationFn: (data: UpdateInventoryProductDto) => inventoryProductsApi.update(productId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory-product-detail", productId] })
+      queryClient.invalidateQueries({ queryKey: ["inventory-products"] })
+      setIsEditModalOpen(false)
+      editForm.resetFields()
+      toast.success("Cập nhật sản phẩm kho thành công")
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Cập nhật thất bại")
+    },
+  })
+
+  const handleEdit = () => {
+    if (product) {
+      editForm.setFieldsValue({
+        name: product.name || "",
+        categoryId: product.categoryId || "",
+        isActive: product.isActive ?? true,
+        description: product.description || undefined,
+      })
+      setIsEditModalOpen(true)
+    }
+  }
+
+  const handleCancel = () => {
+    setIsEditModalOpen(false)
+    editForm.resetFields()
+  }
+
+  const handleSave = () => {
+    editForm.validateFields().then((values) => {
+      updateMutation.mutate(values)
+    })
+  }
 
   const items = useMemo(() => {
     if (!product?.inventoryItems) return []
@@ -166,83 +229,123 @@ export default function InventoryProductDetailPage() {
     }
 
     return (
-      <Card>
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Space style={{ width: "100%", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <Breadcrumb
-                items={[
-                  { title: "Sản phẩm kho", onClick: () => router.push("/inventory-products") },
-                  { title: product.name },
-                ]}
-              />
-              <Space align="center" size={8} style={{ marginTop: 8 }}>
-                <FileTextOutlined style={{ color: "#1890ff" }} />
-                <Title level={4} style={{ margin: 0 }}>
-                  Thông tin sản phẩm
-                </Title>
-              </Space>
-            </div>
-            <Space>
-              <Button icon={<ArrowLeftOutlined />} onClick={() => router.push("/inventory-products")}>
-                Quay lại
-              </Button>
-              <Button type="primary" icon={<EditOutlined />} disabled>
-                Chỉnh sửa
-              </Button>
-            </Space>
-          </Space>
-
-          <Card size="small" bodyStyle={{ padding: 16 }}>
-            <Row gutter={[16, 16]}>
-              <Col span={24}>
-                <Text strong>Tên sản phẩm</Text>
-                <Input value={product.name} readOnly />
-              </Col>
-              <Col xs={24} md={12}>
-                <Text strong>Danh mục</Text>
-                <Input value={product.category?.name || "-"} readOnly />
-              </Col>
-              <Col xs={24} md={12}>
-                <Text strong>Trạng thái</Text>
-                <Input
-                  value={product.isActive ? "Hoạt động" : "Không hoạt động"}
-                  readOnly
-                  suffix={
-                    <Tag color={product.isActive ? "green" : "default"} style={{ marginRight: -4 }}>
-                      {product.isActive ? "Hoạt động" : "Không hoạt động"}
-                    </Tag>
-                  }
-                />
-              </Col>
-              <Col span={24}>
-                <Text strong>Ngày tạo</Text>
-                <Input
-                  value={product.createdAt ? new Date(product.createdAt).toLocaleDateString("vi-VN") : "-"}
-                  readOnly
-                />
-              </Col>
-            </Row>
-          </Card>
-
-          <Card size="small" title="Tình trạng lô hàng">
-            <Row gutter={[12, 12]}>
-              <Col xs={12} md={6}>
-                <Statistic title="Lô sắp hết hạn" value={totals.soonExpiring} valueStyle={{ color: "#f97316" }} />
-              </Col>
-              <Col xs={12} md={6}>
-                <Statistic title="Lô hết hạn" value={totals.expired} valueStyle={{ color: "#dc2626" }} />
-              </Col>
-              <Col xs={12} md={6}>
-                <Statistic title="Lô còn hạn" value={totals.valid} valueStyle={{ color: "#16a34a" }} />
-              </Col>
-              <Col xs={12} md={6}>
-                <Statistic title="SL hết hạn" value={totals.expiredQuantity} valueStyle={{ color: "#dc2626" }} />
-              </Col>
-            </Row>
-          </Card>
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <Space style={{ width: "100%", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <Breadcrumb
+              items={[
+                { 
+                  title: (
+                    <span style={{ cursor: "pointer", transition: "color 0.2s" }} 
+                          onMouseEnter={(e) => e.currentTarget.style.color = "#1890ff"}
+                          onMouseLeave={(e) => e.currentTarget.style.color = "inherit"}>
+                      Sản phẩm kho
+                    </span>
+                  ), 
+                  onClick: () => router.push("/inventory-products") 
+                },
+                { title: product.name },
+              ]}
+            />
+           
+          </div>
+          
         </Space>
-      </Card>
+
+        <Row gutter={[16, 16]} style={{ display: "flex", alignItems: "stretch" }}>
+          <Col xs={24} md={14} style={{ display: "flex" }}>
+            <Card
+              title={
+                <Space>
+                  <FileTextOutlined style={{ color: "#1890ff" }} />
+                  <span>Thông tin sản phẩm</span>
+                </Space>
+              }
+              extra={
+                <Button type="text" icon={<EditOutlined />} onClick={handleEdit}>
+                  Chỉnh sửa
+                </Button>
+              }
+              size="small"
+              style={{ width: "100%", display: "flex", flexDirection: "column" }}
+              bodyStyle={{ flex: 1, display: "flex", flexDirection: "column" }}
+            >
+              <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                <div>
+                  <Space size={8} style={{ marginBottom: 8 }}>
+                    <AppstoreOutlined style={{ color: "#1890ff" }} />
+                    <Text strong>Tên sản phẩm</Text>
+                  </Space>
+                  <Input value={product.name} readOnly style={{ marginTop: 4 }} />
+                </div>
+                <Row gutter={16}>
+                  <Col xs={24} md={12}>
+                    <div>
+                      <Space size={8} style={{ marginBottom: 8 }}>
+                        <TagOutlined style={{ color: "#1890ff" }} />
+                        <Text strong>Danh mục</Text>
+                      </Space>
+                      <Input value={product.category?.name || "-"} readOnly style={{ marginTop: 4 }} />
+                    </div>
+                  </Col>
+                  <Col xs={24} md={12}>
+                    <div>
+                      <Space size={8} style={{ marginBottom: 8 }}>
+                        <CheckCircleOutlined style={{ color: "#52c41a" }} />
+                        <Text strong>Trạng thái</Text>
+                      </Space>
+                      <Input
+                        value={product.isActive ? "Hoạt động" : "Không hoạt động"}
+                        readOnly
+                        style={{ marginTop: 4 }}
+                        suffix={
+                          <Tag color={product.isActive ? "green" : "default"} style={{ marginRight: -4 }}>
+                            {product.isActive ? "Hoạt động" : "Không hoạt động"}
+                          </Tag>
+                        }
+                      />
+                    </div>
+                  </Col>
+                </Row>
+                <div>
+                  <Space size={8} style={{ marginBottom: 8 }}>
+                    <CalendarOutlined style={{ color: "#722ed1" }} />
+                    <Text strong>Ngày tạo</Text>
+                  </Space>
+                  <Input
+                    value={product.createdAt ? new Date(product.createdAt).toLocaleDateString("vi-VN", { day: "numeric", month: "long", year: "numeric" }) : "-"}
+                    readOnly
+                    style={{ marginTop: 4 }}
+                  />
+                </div>
+              </Space>
+            </Card>
+          </Col>
+          <Col xs={24} md={10} style={{ display: "flex" }}>
+            <Card 
+              title="Tình trạng lô hàng" 
+              size="small"
+              style={{ width: "100%", display: "flex", flexDirection: "column" }}
+              bodyStyle={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}
+            >
+              <Row gutter={[12, 12]}>
+                <Col span={12}>
+                  <Statistic title="Lô sắp hết hạn" value={totals.soonExpiring} valueStyle={{ color: "#f97316" }} />
+                </Col>
+                <Col span={12}>
+                  <Statistic title="Lô hết hạn" value={totals.expired} valueStyle={{ color: "#dc2626" }} />
+                </Col>
+                <Col span={12}>
+                  <Statistic title="Lô còn hạn" value={totals.valid} valueStyle={{ color: "#16a34a" }} />
+                </Col>
+                <Col span={12}>
+                  <Statistic title="SL hết hạn" value={totals.expiredQuantity} valueStyle={{ color: "#dc2626" }} />
+                </Col>
+              </Row>
+            </Card>
+          </Col>
+        </Row>
+      </Space>
     )
   }
 
@@ -275,6 +378,95 @@ export default function InventoryProductDetailPage() {
           </Space>
         </Card>
       </Space>
+
+      <Modal
+        title={
+          <Space>
+            <EditOutlined style={{ color: "#1890ff" }} />
+            <span>Chỉnh sửa sản phẩm kho</span>
+          </Space>
+        }
+        open={isEditModalOpen}
+        onCancel={handleCancel}
+        footer={[
+          <Button key="cancel" onClick={handleCancel} disabled={updateMutation.isPending}>
+            Hủy
+          </Button>,
+          <Button
+            key="save"
+            type="primary"
+            icon={<SaveOutlined />}
+            onClick={handleSave}
+            loading={updateMutation.isPending}
+          >
+            Lưu
+          </Button>,
+        ]}
+        width={600}
+      >
+        <Form
+          form={editForm}
+          layout="vertical"
+          style={{ marginTop: 24 }}
+        >
+          <Form.Item
+            label={
+              <Space size={8}>
+                <AppstoreOutlined style={{ color: "#1890ff" }} />
+                <span>Tên sản phẩm</span>
+              </Space>
+            }
+            name="name"
+            rules={[{ required: true, message: "Vui lòng nhập tên sản phẩm" }]}
+          >
+            <Input placeholder="Nhập tên sản phẩm" />
+          </Form.Item>
+
+          <Form.Item
+            label={
+              <Space size={8}>
+                <TagOutlined style={{ color: "#1890ff" }} />
+                <span>Danh mục</span>
+              </Space>
+            }
+            name="categoryId"
+            rules={[{ required: true, message: "Vui lòng chọn danh mục" }]}
+          >
+            <Select
+              placeholder="Chọn hoặc tìm kiếm danh mục"
+              showSearch
+              optionFilterProp="label"
+              filterOption={(input, option) =>
+                String(option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+              }
+              options={categories.map((cat: Category) => ({
+                label: cat.name,
+                value: cat.id,
+              }))}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label={
+              <Space size={8}>
+                <CheckCircleOutlined style={{ color: "#52c41a" }} />
+                <span>Trạng thái</span>
+              </Space>
+            }
+            name="isActive"
+            valuePropName="checked"
+          >
+            <Switch checkedChildren="Hoạt động" unCheckedChildren="Không hoạt động" />
+          </Form.Item>
+
+          <Form.Item
+            label="Mô tả"
+            name="description"
+          >
+            <Input.TextArea rows={4} placeholder="Nhập mô tả (tùy chọn)" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </DashboardLayout>
   )
 }

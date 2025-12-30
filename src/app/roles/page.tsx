@@ -3,17 +3,34 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { rolesApi, Role, CreateRoleDto } from "@/services/api/roles"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { useForm } from "react-hook-form"
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import DashboardLayout from "@/components/dashboard-layout"
+
+// Custom Modal component
+function Modal({ open, onClose, title, children }: {
+  open: boolean
+  onClose: () => void
+  title: string
+  children: React.ReactNode
+}) {
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-lg shadow-lg w-full max-w-[500px] max-h-[90vh] overflow-y-auto m-4">
+        <div className="sticky top-0 bg-white border-b px-6 py-4 z-10">
+          <h2 className="text-xl font-semibold">{title}</h2>
+        </div>
+        <div className="p-6">
+          {children}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function RolesPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -88,124 +105,142 @@ export default function RolesPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Quản lý Roles</h1>
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Tạo role mới
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Tạo role mới</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Tên role <span className="text-red-500">*</span></Label>
-                  <Input
-                    id="name"
-                    {...register("name", { required: "Tên role là bắt buộc" })}
-                  />
-                  {errors.name && (
-                    <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>
-                  )}
-                </div>
-                <Button type="submit" disabled={createMutation.isPending}>
-                  {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Tạo
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <button
+            onClick={() => setIsCreateOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Tạo role mới
+          </button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Danh sách roles</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Danh sách roles</h2>
+          </div>
+          <div className="p-6">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin" />
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tên role</TableHead>
-                    <TableHead>Số người dùng</TableHead>
-                    <TableHead className="text-right">Thao tác</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {roles?.length > 0 ? (
-                    roles?.map((role) => (
-                    <TableRow key={role?.id}>
-                      <TableCell className="font-medium">
-                        <Badge variant="outline">{role?.name}</Badge>
-                      </TableCell>
-                      <TableCell>{role?.users?.length || 0}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(role)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(role?.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-8 text-gray-500">
-                        Không có dữ liệu
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Tên role</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Số người dùng</th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-700">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roles?.length > 0 ? (
+                      roles?.map((role) => (
+                        <tr key={role?.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                          <td className="py-3 px-4">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-700 bg-white">
+                              {role?.name}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-gray-700">{role?.users?.length || 0}</td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                                onClick={() => handleEdit(role)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                                onClick={() => handleDelete(role?.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={3} className="text-center py-8 text-gray-500">
+                          Không có dữ liệu
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* Edit Dialog */}
+        {/* Create Modal */}
+        <Modal
+          open={isCreateOpen}
+          onClose={() => setIsCreateOpen(false)}
+          title="Tạo role mới"
+        >
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div>
+              <label htmlFor="name" className="text-sm font-medium text-gray-700 block mb-1">
+                Tên role <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="name"
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                {...register("name", { required: "Tên role là bắt buộc" })}
+              />
+              {errors.name && (
+                <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>
+              )}
+            </div>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              disabled={createMutation.isPending}
+            >
+              {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Tạo
+            </button>
+          </form>
+        </Modal>
+
+        {/* Edit Modal */}
         {editingRole && (
-          <Dialog open={!!editingRole} onOpenChange={() => setEditingRole(null)}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Cập nhật role</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                <div>
-                  <Label htmlFor="edit-name">Tên role <span className="text-red-500">*</span></Label>
-                  <Input
-                    id="edit-name"
-                    {...register("name", { required: "Tên role là bắt buộc" })}
-                  />
-                  {errors.name && (
-                    <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>
-                  )}
-                </div>
-                <Button type="submit" disabled={updateMutation.isPending}>
-                  {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Cập nhật
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Modal
+            open={!!editingRole}
+            onClose={() => setEditingRole(null)}
+            title="Cập nhật role"
+          >
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <div>
+                <label htmlFor="edit-name" className="text-sm font-medium text-gray-700 block mb-1">
+                  Tên role <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="edit-name"
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  {...register("name", { required: "Tên role là bắt buộc" })}
+                />
+                {errors.name && (
+                  <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>
+                )}
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                Cập nhật
+              </button>
+            </form>
+          </Modal>
         )}
       </div>
     </DashboardLayout>
   )
 }
-

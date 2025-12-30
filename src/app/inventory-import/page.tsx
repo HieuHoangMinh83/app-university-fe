@@ -118,18 +118,8 @@ export default function InventoryImportPage() {
     const itemIndex = importItems.findIndex(item => item.id === id)
     if (itemIndex === -1) return
     
-    console.log(`[Update Item] ID: ${id}, Index: ${itemIndex}, Field: ${field}, Value:`, {
-      value,
-      valueType: typeof value,
-      beforeUpdate: importItems[itemIndex],
-      fieldValue: importItems[itemIndex]?.[field]
-    })
     const updated = [...importItems]
     updated[itemIndex] = { ...updated[itemIndex], [field]: value }
-    console.log(`[After Update] ID: ${id}, Index: ${itemIndex}:`, {
-      updatedItem: updated[itemIndex],
-      allItems: updated
-    })
     setImportItems(updated)
   }
 
@@ -190,11 +180,6 @@ export default function InventoryImportPage() {
             const currentValue = prev[item.id]
             const shouldUpdate = !currentValue || currentValue === product.name
             if (shouldUpdate) {
-              console.log(`[Sync SearchValue] Item ID: ${item.id}:`, {
-                currentValue,
-                productName: product.name,
-                willUpdate: true
-              })
               return { ...prev, [item.id]: product.name }
             }
             return prev
@@ -237,24 +222,7 @@ export default function InventoryImportPage() {
       
       // Validate productId
       const productIdStr = String(item.productId || "").trim()
-      console.log(`[Validation] Item #${i + 1}:`, {
-        productId: item.productId,
-        productIdType: typeof item.productId,
-        productIdStr: productIdStr,
-        productIdStrLength: productIdStr.length,
-        productName: item.productName,
-        fullItem: item,
-        allImportItems: importItems
-      })
       if (!productIdStr || productIdStr === "") {
-        console.error(`[Validation Error] Item #${i + 1} - productId is empty or invalid:`, {
-          productId: item.productId,
-          productIdType: typeof item.productId,
-          productIdStr: productIdStr,
-          productIdStrLength: productIdStr.length,
-          item: item,
-          allImportItems: importItems
-        })
         toast.error(`Vui lòng chọn sản phẩm cho sản phẩm #${i + 1}`)
         return
       }
@@ -465,11 +433,6 @@ export default function InventoryImportPage() {
                                 }
                                 onChange={(e) => {
                                   const searchValue = e.target.value
-                                  console.log(`[Input onChange] Item ID: ${item.id}:`, {
-                                    searchValue,
-                                    currentProductId: item.productId,
-                                    currentProductName: item.productName
-                                  })
                                   
                                   // Luôn cập nhật search value để hiển thị
                                   setProductSearchValues(prev => ({ ...prev, [item.id]: searchValue }))
@@ -535,14 +498,6 @@ export default function InventoryImportPage() {
                                           onClick={() => {
                                             // Đảm bảo productId luôn là string
                                             const productId = product?.id ? String(product.id) : ""
-                                            console.log(`[Select Product] Item ID: ${item.id}:`, {
-                                              productId: productId,
-                                              productIdType: typeof productId,
-                                              productOriginalId: product?.id,
-                                              productOriginalIdType: typeof product?.id,
-                                              productName: product?.name,
-                                              beforeUpdate: item
-                                            })
                                             
                                             // Update tất cả fields cùng lúc để đảm bảo consistency
                                             const updatedItems = importItems.map(i => 
@@ -560,11 +515,6 @@ export default function InventoryImportPage() {
                                             // Set search value và đóng popover
                                             setProductSearchValues(prev => ({ ...prev, [item.id]: product?.name || "" }))
                                             setProductPopoverOpen(prev => ({ ...prev, [item.id]: false }))
-                                            
-                                            console.log(`[After Select] Item ID: ${item.id}:`, {
-                                              updatedItem: updatedItems.find(i => i.id === item.id),
-                                              allItems: updatedItems
-                                            })
                                           }}
                                           className={cn(
                                             "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-blue-50 hover:text-blue-900",

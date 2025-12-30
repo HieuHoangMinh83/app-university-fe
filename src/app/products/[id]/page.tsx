@@ -422,7 +422,7 @@ export default function ProductDetailPage() {
                   <ChevronRight className="h-6 w-6" />
                 </BreadcrumbSeparator>
                 <BreadcrumbItem>
-                  <span className="text-blue-500 font-medium text-lg">Chi tiết sản phẩm</span>
+                  <span className="text-blue-500 font-medium text-lg">Chi tiết Đơn hàng</span>
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
@@ -611,7 +611,7 @@ export default function ProductDetailPage() {
                   </CardTitle>
                   <Dialog open={isAddComboOpen} onOpenChange={setIsAddComboOpen}>
                     <DialogTrigger asChild>
-                      <Button size="sm" className="gap-2 shadow-sm bg-blue-600 hover:bg-blue-700">
+                      <Button size="sm" className="gap-2 shadow-sm bg-blue-600 hover:bg-blue-700 text-white">
                         <Plus className="h-4 w-4" />
                         Thêm option
                       </Button>

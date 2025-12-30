@@ -114,19 +114,63 @@ export interface UpdateComboDto {
   isPromotionActive?: boolean;
 }
 
-export interface GetProductsParams extends PaginationParams {
+export interface GetProductsFilterParams {
   categoryId?: string;
   status?: string;
 }
 
+export interface GetProductsPaginatedParams extends PaginationParams, GetProductsFilterParams {}
+
 export const productsApi = {
-  // Lấy tất cả products
-  getAll: async (params?: GetProductsParams): Promise<Product[] | PaginatedResponse<Product>> => {
+  // Lấy tất cả products (không phân trang)
+  getAll: async (params?: GetProductsFilterParams): Promise<Product[]> => {
+    try {
+      // Chỉ truyền params hợp lệ (loại bỏ undefined/null)
+      const cleanParams: Record<string, any> = {};
+      if (params) {
+        Object.keys(params).forEach(key => {
+          const value = params[key as keyof GetProductsFilterParams];
+          if (value !== undefined && value !== null) {
+            cleanParams[key] = value;
+          }
+        });
+      }
+      const response = await apiClient.get("/products", Object.keys(cleanParams).length > 0 ? { params: cleanParams } : {});
+      
+      // Xử lý response với cấu trúc: { statusCode, message, data: { data: [...] } }
+      if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+        return response.data.data.data;
+      }
+      
+      // Xử lý response với cấu trúc: { statusCode, message, data: [...] } (data là array trực tiếp)
+      if (response?.data?.data && Array.isArray(response.data.data)) {
+        return response.data.data;
+      }
+      
+      // Xử lý response với cấu trúc: { data: [...] } (không có statusCode)
+      if (response?.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+      
+      // Fallback
+      const data = response.data?.data || response.data;
+      if (Array.isArray(data)) {
+        return data;
+      }
+      
+      return [];
+    } catch (error: any) {
+      throw error;
+    }
+  },
+
+  // Lấy products có phân trang
+  getPaginated: async (params?: GetProductsPaginatedParams): Promise<PaginatedResponse<Product>> => {
     // Chỉ truyền params hợp lệ (loại bỏ undefined/null)
     const cleanParams: Record<string, any> = {};
     if (params) {
       Object.keys(params).forEach(key => {
-        const value = params[key as keyof GetProductsParams];
+        const value = params[key as keyof GetProductsPaginatedParams];
         if (value !== undefined && value !== null) {
           cleanParams[key] = value;
         }
@@ -134,7 +178,7 @@ export const productsApi = {
     }
     const response = await apiClient.get("/products", Object.keys(cleanParams).length > 0 ? { params: cleanParams } : {});
     
-    // Xử lý response với cấu trúc: { data: { data: [...], pagination: {...} } }
+    // Xử lý response với cấu trúc: { statusCode, message, data: { data: [...], pagination: {...} } }
     if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
       const pagination = response.data.data.pagination;
       if (pagination) {
@@ -148,21 +192,46 @@ export const productsApi = {
           }
         } as PaginatedResponse<Product>;
       }
-      // Nếu có data nhưng không có pagination, trả về array
-      return response.data.data.data;
     }
     
-    // Check if response has pagination structure: { data: { data: [...], meta: {...} } }
+    // Xử lý response với cấu trúc: { statusCode, message, data: { data: [...], meta: {...} } }
     if (response?.data?.data?.data && response?.data?.data?.meta) {
       return response.data.data as PaginatedResponse<Product>;
     }
+    
+    // Xử lý response với cấu trúc: { statusCode, message, data: [...], meta: {...} }
+    if (response?.data?.data && Array.isArray(response.data.data)) {
+      if (response?.data?.meta || response?.data?.pagination) {
+        const pagination = response.data.pagination || response.data.meta;
+        return {
+          data: response.data.data,
+          meta: {
+            page: pagination?.page || 1,
+            pageSize: pagination?.pageSize || response.data.data.length,
+            total: pagination?.total || response.data.data.length,
+            totalPages: pagination?.totalPages || 1,
+          }
+        } as PaginatedResponse<Product>;
+      }
+    }
+    
     // Check if response is direct paginated: { data: [...], meta: {...} }
     if (response?.data?.data && response?.data?.meta && Array.isArray(response.data.data)) {
       return response.data as PaginatedResponse<Product>;
     }
-    // Fallback to non-paginated response
+    
+    // Fallback: nếu không có pagination, trả về với meta mặc định
     const data = response.data?.data || response.data;
-    return Array.isArray(data) ? data : [];
+    const productsArray = Array.isArray(data) ? data : [];
+    return {
+      data: productsArray,
+      meta: {
+        page: 1,
+        pageSize: productsArray.length,
+        total: productsArray.length,
+        totalPages: 1,
+      }
+    };
   },
 
   // Lấy product theo ID
