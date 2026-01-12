@@ -682,12 +682,12 @@ export default function InventoryImportPage() {
             
             <div className="space-y-4 ">
               <div>
-                <Label htmlFor="sessionDescription mb-4">
+                <Label htmlFor="sessionDescription" className="block mb-4">
                   Mô tả cho lần nhập kho này
                 </Label>
                 <Textarea
                   id="sessionDescription"
-                  className=""
+                  className="mt-2"
                   placeholder="Ví dụ: Nhập kho lô 10/12, Nhập từ nhà cung cấp ABC..."
                   rows={3}
                   value={sessionDescription}
@@ -756,7 +756,7 @@ export default function InventoryImportPage() {
               <Button
                 onClick={handleConfirmImport}
                 disabled={importMutation.isPending}
-                className="shadow-none"
+                className="shadow-none !text-white"
               >
                 {importMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Xác nhận nhập kho

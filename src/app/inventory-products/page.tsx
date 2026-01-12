@@ -466,7 +466,7 @@ export default function InventoryProductsPage() {
         >
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <div>
-              <div style={{ fontWeight: 500, marginBottom: 6 }}>Danh mục</div>
+              <div className="font-semibold mb-2">Danh mục</div>
               <Select
                 value={tempCategoryFilter}
                 onChange={setTempCategoryFilter}
@@ -478,7 +478,7 @@ export default function InventoryProductsPage() {
               />
             </div>
             <div>
-              <div style={{ fontWeight: 500, marginBottom: 6 }}>Trạng thái hoạt động</div>
+              <div className="font-semibold mb-2">Trạng thái hoạt động</div>
               <Select
                 value={tempStatusFilter}
                 onChange={setTempStatusFilter}
@@ -536,17 +536,28 @@ export default function InventoryProductsPage() {
             <Form.Item
               label={
                 <>
-                  Tên sản phẩm <span style={{ color: "red" }}>*</span>
+                  Tên sản phẩm <span className="text-red-500">*</span>
                 </>
               }
               name="name"
               rules={[{ required: true, message: "Tên sản phẩm là bắt buộc" }]}
+              className="mb-5"
+              style={{ marginBottom: 20 }}
             >
-              <Input placeholder="Nhập tên sản phẩm" />
+              <div style={{ marginTop: 12 }}>
+                <Input placeholder="Nhập tên sản phẩm" />
+              </div>
             </Form.Item>
 
-            <Form.Item label="Mô tả" name="description">
-              <Input.TextArea rows={3} placeholder="Mô tả sản phẩm" />
+            <Form.Item 
+              label="Mô tả" 
+              name="description"
+              className="mb-5"
+              style={{ marginBottom: 20 }}
+            >
+              <div style={{ marginTop: 12 }}>
+                <Input.TextArea rows={3} placeholder="Mô tả sản phẩm" />
+              </div>
             </Form.Item>
 
             <Row gutter={16}>
@@ -554,16 +565,20 @@ export default function InventoryProductsPage() {
                 <Form.Item
                   label={
                     <>
-                      Danh mục <span style={{ color: "red" }}>*</span>
+                      Danh mục <span className="text-red-500">*</span>
                     </>
                   }
                   name="categoryId"
                   rules={[{ required: true, message: "Danh mục là bắt buộc" }]}
+                  className="mb-5"
+                  style={{ marginBottom: 20 }}
                 >
-                  <Select
-                    placeholder="Chọn danh mục"
-                    options={categories.map((c: Category) => ({ label: c?.name, value: c?.id }))}
-                  />
+                  <div style={{ marginTop: 12 }}>
+                    <Select
+                      placeholder="Chọn danh mục"
+                      options={categories.map((c: Category) => ({ label: c?.name, value: c?.id }))}
+                    />
+                  </div>
                 </Form.Item>
               </Col>
               <Col span={12}>
@@ -572,8 +587,12 @@ export default function InventoryProductsPage() {
                   name="hasExpiryDate"
                   valuePropName="checked"
                   tooltip="Nếu bật, sản phẩm sẽ yêu cầu nhập ngày hết hạn khi nhập kho"
+                  className="mb-5"
+                  style={{ marginBottom: 20 }}
                 >
-                  <Switch />
+                  <div style={{ marginTop: 12 }}>
+                    <Switch />
+                  </div>
                 </Form.Item>
               </Col>
             </Row>
@@ -618,17 +637,28 @@ export default function InventoryProductsPage() {
             <Form.Item
               label={
                 <>
-                  Tên sản phẩm <span style={{ color: "red" }}>*</span>
+                  Tên sản phẩm <span className="text-red-500">*</span>
                 </>
               }
               name="name"
               rules={[{ required: true, message: "Tên sản phẩm là bắt buộc" }]}
+              className="mb-5"
+              style={{ marginBottom: 20 }}
             >
-              <Input placeholder="Nhập tên sản phẩm" />
+              <div style={{ marginTop: 12 }}>
+                <Input placeholder="Nhập tên sản phẩm" />
+              </div>
             </Form.Item>
 
-            <Form.Item label="Mô tả" name="description">
-              <Input.TextArea rows={3} placeholder="Mô tả sản phẩm" />
+            <Form.Item 
+              label="Mô tả" 
+              name="description"
+              className="mb-5"
+              style={{ marginBottom: 20 }}
+            >
+              <div style={{ marginTop: 12 }}>
+                <Input.TextArea rows={3} placeholder="Mô tả sản phẩm" />
+              </div>
             </Form.Item>
 
             <Row gutter={16}>
@@ -636,16 +666,20 @@ export default function InventoryProductsPage() {
                 <Form.Item
                   label={
                     <>
-                      Danh mục <span style={{ color: "red" }}>*</span>
+                      Danh mục <span className="text-red-500">*</span>
                     </>
                   }
                   name="categoryId"
                   rules={[{ required: true, message: "Danh mục là bắt buộc" }]}
+                  className="mb-5"
+                  style={{ marginBottom: 20 }}
                 >
-                  <Select
-                    placeholder="Chọn danh mục"
-                    options={categories.map((c: Category) => ({ label: c?.name, value: c?.id }))}
-                  />
+                  <div style={{ marginTop: 12 }}>
+                    <Select
+                      placeholder="Chọn danh mục"
+                      options={categories.map((c: Category) => ({ label: c?.name, value: c?.id }))}
+                    />
+                  </div>
                 </Form.Item>
               </Col>
               <Col span={12}>
@@ -654,8 +688,12 @@ export default function InventoryProductsPage() {
                   name="hasExpiryDate"
                   valuePropName="checked"
                   tooltip="Nếu bật, sản phẩm sẽ yêu cầu nhập ngày hết hạn khi nhập kho"
+                  className="mb-5"
+                  style={{ marginBottom: 20 }}
                 >
-                  <Switch />
+                  <div style={{ marginTop: 12 }}>
+                    <Switch />
+                  </div>
                 </Form.Item>
               </Col>
             </Row>
@@ -695,16 +733,16 @@ export default function InventoryProductsPage() {
                 <Space direction="vertical" size={12} style={{ width: "100%" }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                     <div>
-                      <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 4 }}>Danh mục</div>
-                      <div style={{ fontWeight: 500 }}>{selectedProduct.category?.name || "-"}</div>
+                      <div className="text-gray-500 text-xs mb-1">Danh mục</div>
+                      <div className="font-semibold">{selectedProduct.category?.name || "-"}</div>
                     </div>
                     <div>
-                      <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 4 }}>Trạng thái</div>
+                      <div className="text-gray-500 text-xs mb-1">Trạng thái</div>
                       {getStatusTag(selectedProduct.isActive)}
                     </div>
                     {selectedProduct.description && (
                       <div style={{ gridColumn: "1 / -1" }}>
-                        <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 4 }}>Mô tả</div>
+                        <div className="text-gray-500 text-xs mb-1">Mô tả</div>
                         <div>{selectedProduct.description}</div>
                       </div>
                     )}
@@ -732,7 +770,7 @@ export default function InventoryProductsPage() {
               />
             </Space>
           ) : (
-            <div style={{ textAlign: "center", padding: 32, color: "#6b7280" }}>Không có dữ liệu</div>
+            <div className="text-center p-8 text-gray-500">Không có dữ liệu</div>
           )}
         </Modal>
       </Space>

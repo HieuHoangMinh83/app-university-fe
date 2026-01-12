@@ -55,7 +55,7 @@ function Modal({ open, onClose, title, description, children, className = "" }: 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <div className={`relative bg-white rounded-lg shadow-lg w-full max-w-[1000px] max-h-[95vh] overflow-y-auto m-4 ${className}`}>
+      <div className={`relative bg-white rounded-lg w-full max-h-[95vh] overflow-y-auto m-4 ${className || 'max-w-[1000px]'}`}>
         {(title || description) && (
           <div className="sticky top-0 bg-white border-b px-6 py-4 z-10">
             {title && <div className="text-lg font-semibold text-center">{title}</div>}
@@ -121,6 +121,7 @@ export default function ClientDetailPage() {
   const [voucherPageSize] = useState(5)
   const [orderPage, setOrderPage] = useState(1)
   const [orderPageSize] = useState(5)
+  const [hasSubmittedOrderForm, setHasSubmittedOrderForm] = useState(false)
 
   const { data: client, isLoading: isLoadingClient } = useQuery({
     queryKey: ["client", clientId],
@@ -224,13 +225,28 @@ export default function ClientDetailPage() {
     paymentMethod?: "CASH" | "TRANSFER"
   }
 
-  const { register, handleSubmit, control, watch, reset, setValue, formState: { errors } } = useForm<OrderFormData>({
+  const { register, handleSubmit, control, watch, reset, setValue, formState: { errors }, clearErrors } = useForm<OrderFormData>({
     defaultValues: {
       items: [],
       clientVoucherId: undefined,
       paymentMethod: "CASH",
     },
+    mode: "onSubmit",
   })
+
+  // Reset form và clear errors khi mở modal
+  useEffect(() => {
+    if (isCreateOrderOpen) {
+      reset({ items: [], clientVoucherId: undefined, paymentMethod: "CASH" })
+      clearErrors()
+      setHasSubmittedOrderForm(false)
+      setQuantityInputValues({})
+      setProductSearchValues({})
+      setProductPopoverOpen({})
+      setComboSearchValues({})
+      setComboPopoverOpen({})
+    }
+  }, [isCreateOrderOpen, reset, clearErrors])
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -390,6 +406,8 @@ export default function ClientDetailPage() {
   }, [voucherPopoverOpen])
 
   const onSubmitOrder = (data: OrderFormData) => {
+    setHasSubmittedOrderForm(true)
+    
     if (!data.items || data.items.length === 0) {
       toast.error("Vui lòng thêm ít nhất 1 combo")
       return
@@ -1001,8 +1019,8 @@ export default function ClientDetailPage() {
             setComboPopoverOpen({})
           }}
           title="Tạo đơn hàng mới"
-          description="Thêm sản phẩm và combo vào đơn hàng cho khách hàng này"
-          className="sm:max-w-[1000px] min-h-[750px]"
+         
+          className="sm:max-w-[1400px] min-h-[700px] max-h-[90vh]"
         >
             <form onSubmit={handleSubmit(onSubmitOrder)} className="space-y-4">
               {/* Order Items */}
@@ -1192,7 +1210,7 @@ export default function ClientDetailPage() {
                                 type="hidden"
                                 {...register(`items.${index}.productId`, { required: "Vui lòng chọn sản phẩm" })}
                               />
-                              {errors.items?.[index]?.productId && (
+                              {hasSubmittedOrderForm && errors.items?.[index]?.productId && (
                                 <p className="text-xs text-red-500 mt-1">{errors.items[index]?.productId?.message}</p>
                               )}
                             </div>
@@ -1327,7 +1345,7 @@ export default function ClientDetailPage() {
                                 type="hidden"
                                 {...register(`items.${index}.comboId`, { required: "Vui lòng chọn combo" })}
                               />
-                              {errors.items?.[index]?.comboId && (
+                              {hasSubmittedOrderForm && errors.items?.[index]?.comboId && (
                                 <p className="text-xs text-red-500 mt-1">{errors.items[index]?.comboId?.message}</p>
                               )}
                             </div>
@@ -1402,7 +1420,7 @@ export default function ClientDetailPage() {
                                   valueAsNumber: true,
                                 })}
                               />
-                              {errors.items?.[index]?.quantity && (
+                              {hasSubmittedOrderForm && errors.items?.[index]?.quantity && (
                                 <p className="text-xs text-red-500 mt-1">{errors.items[index]?.quantity?.message}</p>
                               )}
                             </div>
