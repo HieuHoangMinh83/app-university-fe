@@ -264,5 +264,39 @@ export const inventoryProductsApi = {
     const data = response?.data?.data || response?.data;
     return Array.isArray(data) ? data : [];
   },
+
+  // Lấy các lô còn hạn theo mảng ID sản phẩm
+  getValidItems: async (productIds: string[]): Promise<Array<{
+    productId: string;
+    inventoryProduct: {
+      id: string;
+      name: string;
+      description: string | null;
+    };
+    items: Array<{
+      id: string;
+      quantity: number;
+      expiryDate: string;
+      notes: string | null;
+      session: {
+        code: string;
+        type: "IMPORT" | "EXPORT";
+        createdAt: string;
+        description: string | null;
+      };
+      importedBy: {
+        id: string;
+        name: string;
+        phone: string;
+      };
+      createdAt: string;
+      updatedAt: string;
+    }>;
+    totalQuantity: number;
+    itemCount: number;
+  }>> => {
+    const response = await apiClient.post("/inventory-products/valid-items", { productIds });
+    return response?.data?.data || response?.data || [];
+  },
 };
 

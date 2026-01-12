@@ -2,12 +2,13 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { ordersApi, Order, OrderStatus, OrderFlowDto, CancelOrderDto, RefundOrderDto, ReturnOrderDto } from "@/services/api/orders"
+import { inventoryProductsApi } from "@/services/api/inventory-products"
 import { Loader2, ArrowLeft, ChevronRight, Package, Truck, CheckCircle, X, RotateCcw, DollarSign } from "lucide-react"
 import { toast } from "sonner"
 import DashboardLayout from "@/components/dashboard-layout"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 
 // Breadcrumb Components
@@ -52,7 +53,7 @@ function Modal({ open, onClose, title, description, children, className = "" }: 
       <div className={`relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col ${className}`}>
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
-            {title && <h2 className="text-lg font-semibold text-gray-900">{title}</h2>}
+            {title && <h2 className="text-lg font-semibold text-gray-900 text-center" >{title}</h2>}
             {description && <p className="text-sm text-gray-500 mt-1">{description}</p>}
           </div>
           <button
@@ -85,6 +86,9 @@ export default function OrderDetailPage() {
   // Form states
   const [flowAction, setFlowAction] = useState<"PROCESS" | "SHIP" | "DELIVER">("PROCESS")
   const [flowNotes, setFlowNotes] = useState("")
+  // State cho chọn lô hàng: { orderItemId: { inventoryProductId: { inventoryItemId: quantity } } }
+  const [selectedLots, setSelectedLots] = useState<Record<string, Record<string, Record<string, number>>>>({})
+  const [processModalOpenCount, setProcessModalOpenCount] = useState(0) // Đếm số lần mở modal để force refetch
   const [cancelReason, setCancelReason] = useState("")
   const [refundAction, setRefundAction] = useState<"CREATE" | "COMPLETE">("CREATE")
   const [refundReason, setRefundReason] = useState("")
@@ -103,6 +107,170 @@ export default function OrderDetailPage() {
     enabled: !!orderId,
   })
 
+  // Lấy danh sách inventory product IDs từ order items (từ combo items)
+  const inventoryProductIds = useMemo(() => {
+    if (!order?.items) {
+      return []
+    }
+    const productIds = new Set<string>()
+    
+    order.items.forEach((item) => {
+      // Lấy từ combo.items (các sản phẩm trong combo)
+      if (item?.combo?.items && Array.isArray(item.combo.items)) {
+        item.combo.items.forEach((comboItem: any) => {
+          // Có thể có inventoryProductId trực tiếp hoặc trong inventoryProduct.id
+          const inventoryProductId = comboItem?.inventoryProductId || comboItem?.inventoryProduct?.id
+          if (inventoryProductId) {
+            productIds.add(inventoryProductId)
+          } else {
+          }
+        })
+      } else {
+      }
+    })
+    
+    const result = Array.from(productIds)
+    return result
+  }, [order])
+
+  // Fetch valid items khi mở modal PROCESS
+  const shouldFetchValidItems = flowModalOpen && flowAction === "PROCESS" && inventoryProductIds.length > 0 && !!order
+  
+  
+  const { data: validItemsData, isLoading: isLoadingValidItems, refetch: refetchValidItems } = useQuery({
+    queryKey: ["valid-items", orderId, inventoryProductIds.sort().join(","), processModalOpenCount],
+    queryFn: async () => {
+      if (inventoryProductIds.length === 0) {
+        return []
+      }
+      try {
+        const result = await inventoryProductsApi.getValidItems(inventoryProductIds)
+        return result
+      } catch (error) {
+        console.error("❌ Error fetching valid items:", error)
+        throw error
+      }
+    },
+    enabled: shouldFetchValidItems, // Tự động fetch khi có điều kiện
+    staleTime: 0, // Luôn coi là stale để fetch lại
+    gcTime: 0, // Không cache
+    refetchOnMount: true, // Refetch khi mount lại
+    refetchOnWindowFocus: false, // Không refetch khi focus window
+  })
+
+  // Reset selected lots khi đóng modal
+  useEffect(() => {
+    if (!flowModalOpen) {
+      setSelectedLots({})
+    }
+  }, [flowModalOpen])
+
+  // Tự động chọn lô hàng theo FIFO khi có dữ liệu valid items
+  useEffect(() => {
+    if (flowModalOpen && flowAction === "PROCESS" && validItemsData && order?.items && Array.isArray(validItemsData) && validItemsData.length > 0) {
+      const autoSelected = autoSelectLots(validItemsData, order.items)
+      setSelectedLots(autoSelected)
+    }
+  }, [flowModalOpen, flowAction, validItemsData, order?.items])
+
+  // Force refetch API mỗi lần mở modal PROCESS
+  useEffect(() => {
+    if (flowModalOpen && flowAction === "PROCESS" && inventoryProductIds.length > 0 && order && processModalOpenCount > 0) {
+      // Sử dụng setTimeout nhỏ để đảm bảo query đã được setup
+      const timer = setTimeout(() => {
+        refetchValidItems()
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [flowModalOpen, flowAction, processModalOpenCount, inventoryProductIds.length, order, refetchValidItems])
+
+  // Tự động chọn lô hàng theo FIFO (hạn sử dụng sớm nhất)
+  const autoSelectLots = (validItemsData: any[], orderItems: any[]) => {
+    const autoSelected: Record<string, Record<string, Record<string, number>>> = {}
+
+    orderItems.forEach((orderItem) => {
+      if (!orderItem?.combo?.items || !Array.isArray(orderItem.combo.items)) return
+
+      orderItem.combo.items.forEach((comboItem: any) => {
+        const inventoryProductId = comboItem?.inventoryProductId || comboItem?.inventoryProduct?.id
+        if (!inventoryProductId) return
+
+        const requiredQuantity = (comboItem?.quantity || 0) * (orderItem.quantity || 0)
+        const productData = validItemsData?.find((v: any) => v.productId === inventoryProductId)
+        
+        if (!productData?.items || productData.items.length === 0) return
+
+        // Sắp xếp theo expiryDate (FIFO - hạn sử dụng sớm nhất trước)
+        const sortedItems = [...productData.items].sort((a: any, b: any) => 
+          new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
+        )
+
+        let remainingQuantity = requiredQuantity
+
+        if (!autoSelected[orderItem.id]) {
+          autoSelected[orderItem.id] = {}
+        }
+        if (!autoSelected[orderItem.id][inventoryProductId]) {
+          autoSelected[orderItem.id][inventoryProductId] = {}
+        }
+
+        // Chọn lô hàng theo FIFO cho đến khi đủ số lượng
+        for (const item of sortedItems) {
+          if (remainingQuantity <= 0) break
+          
+          const takeQuantity = Math.min(item.quantity, remainingQuantity)
+          if (takeQuantity > 0) {
+            autoSelected[orderItem.id][inventoryProductId][item.id] = takeQuantity
+            remainingQuantity -= takeQuantity
+          }
+        }
+      })
+    })
+
+    return autoSelected
+  }
+
+  // Build itemLots structure từ selectedLots
+  const buildItemLots = (): OrderFlowDto["itemLots"] => {
+    if (!selectedLots || Object.keys(selectedLots).length === 0) {
+      return undefined
+    }
+
+    const itemLots: OrderFlowDto["itemLots"] = []
+
+    Object.entries(selectedLots).forEach(([orderItemId, productLotsMap]) => {
+      const productLots: Array<{
+        inventoryProductId: string
+        lots: Array<{ inventoryItemId: string; quantity: number }>
+      }> = []
+
+      Object.entries(productLotsMap).forEach(([inventoryProductId, lotsMap]) => {
+        const lots = Object.entries(lotsMap)
+          .filter(([_, quantity]) => quantity > 0)
+          .map(([inventoryItemId, quantity]) => ({
+            inventoryItemId,
+            quantity,
+          }))
+
+        if (lots.length > 0) {
+          productLots.push({
+            inventoryProductId,
+            lots,
+          })
+        }
+      })
+
+      if (productLots.length > 0) {
+        itemLots.push({
+          orderItemId,
+          productLots,
+        })
+      }
+    })
+
+    return itemLots.length > 0 ? itemLots : undefined
+  }
+
   // Flow mutation (PROCESS, SHIP, DELIVER)
   const flowMutation = useMutation({
     mutationFn: (data: OrderFlowDto) => ordersApi.flow(orderId, data),
@@ -111,6 +279,7 @@ export default function OrderDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["orders"] })
       setFlowModalOpen(false)
       setFlowNotes("")
+      setSelectedLots({})
       toast.success("Cập nhật trạng thái đơn hàng thành công")
     },
     onError: (error: any) => {
@@ -194,15 +363,13 @@ export default function OrderDetailPage() {
       case "PROCESSING":
         actions.push(
           { type: "SHIP", label: "Giao hàng", icon: <Truck className="h-4 w-4" />, className: "bg-green-600 hover:bg-green-700 !text-white" },
-          { type: "CANCEL", label: "Hủy đơn hàng", icon: <X className="h-4 w-4" />, className: "bg-red-600 hover:bg-red-700 !text-white" },
-          { type: "REFUND_CREATE", label: "Tạo yêu cầu hoàn tiền", icon: <DollarSign className="h-4 w-4" />, className: "bg-amber-600 hover:bg-amber-700 !text-white" }
+          { type: "CANCEL", label: "Hủy đơn hàng", icon: <X className="h-4 w-4" />, className: "bg-red-600 hover:bg-red-700 !text-white" }
         )
         break
       case "SHIPPED":
         actions.push(
           { type: "DELIVER", label: "Xác nhận nhận hàng", icon: <CheckCircle className="h-4 w-4" />, className: "bg-green-600 hover:bg-green-700 !text-white" },
-          { type: "CANCEL", label: "Hủy đơn hàng", icon: <X className="h-4 w-4" />, className: "bg-red-600 hover:bg-red-700 !text-white" },
-          { type: "REFUND_CREATE", label: "Tạo yêu cầu hoàn tiền", icon: <DollarSign className="h-4 w-4" />, className: "bg-amber-600 hover:bg-amber-700 !text-white" }
+          { type: "CANCEL", label: "Hủy đơn hàng", icon: <X className="h-4 w-4" />, className: "bg-red-600 hover:bg-red-700 !text-white" }
         )
         break
       case "DELIVERED":
@@ -233,6 +400,8 @@ export default function OrderDetailPage() {
   const handleActionClick = (actionType: string) => {
     switch (actionType) {
       case "PROCESS":
+        // Tăng counter để force refetch API mỗi lần mở modal
+        setProcessModalOpenCount(prev => prev + 1)
         setFlowAction("PROCESS")
         setFlowModalOpen(true)
         break
@@ -562,14 +731,6 @@ export default function OrderDetailPage() {
                   <span className="text-sm font-medium text-gray-500">Tổng tiền</span>
                   <span className="text-lg font-bold text-blue-600">{order?.totalPrice ? formatPrice(order.totalPrice) : "-"}</span>
                 </div>
-                {order?.countedInRevenue !== undefined && (
-                  <div className="flex items-center justify-between py-2.5 border-b border-gray-100 min-h-[44px]">
-                    <span className="text-sm font-medium text-gray-500">Tính vào doanh thu</span>
-                    <span className={`text-sm font-semibold ${order.countedInRevenue ? "text-green-600" : "text-gray-500"}`}>
-                      {order.countedInRevenue ? "Có" : "Không"}
-                    </span>
-                  </div>
-                )}
                 {order?.revenue !== undefined && order.revenue > 0 && (
                   <div className="flex items-center justify-between py-2.5 border-b border-gray-100 min-h-[44px]">
                     <span className="text-sm font-medium text-gray-500">Doanh thu</span>
@@ -609,43 +770,78 @@ export default function OrderDetailPage() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Sản phẩm</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Combo</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Số lượng</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Đơn giá</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-700">Thành tiền</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Tên sản phẩm</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Tên combo</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Sản phẩm chính</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Sản phẩm tặng kèm</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Số lượng mua sắm</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-700">Giá tiền</th>
                   </tr>
                 </thead>
                 <tbody>
                   {order?.items?.length > 0 ? (
                     order?.items?.map((item) => {
+                      // Phân loại sản phẩm chính và tặng kèm
+                      const mainProducts: Array<{ name: string; quantity: number }> = []
+                      const giftProducts: Array<{ name: string; quantity: number }> = []
+                      
+                      if (item?.combo?.items && Array.isArray(item.combo.items)) {
+                        item.combo.items.forEach((comboItem: any) => {
+                          const productName = comboItem?.inventoryProduct?.name || "Sản phẩm không xác định"
+                          const quantity = comboItem?.quantity || 0
+                          
+                          if (comboItem?.isGift) {
+                            giftProducts.push({ name: productName, quantity })
+                          } else {
+                            mainProducts.push({ name: productName, quantity })
+                          }
+                        })
+                      }
+
                       return (
                       <tr key={item?.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                         <td className="py-3 px-4 font-medium text-gray-900">
+                          {item?.product?.id && item?.product?.name ? (
+                            <Link 
+                              href={`/products/${item.product.id}`}
+                              className="text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                            >
+                              {item.product.name}
+                            </Link>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-gray-700">
                           {item?.combo?.name || "-"}
                         </td>
-                        <td className="py-3 px-4">
-                          {item?.combo?.items && item.combo.items.length > 0 ? (
-                            <div className="text-sm text-gray-600 space-y-1">
-                              {item.combo.items.map((comboItem: any, idx: number) => (
-                                <div key={comboItem?.id || idx} className="flex items-center gap-2">
-                                  <span className="text-gray-500">•</span>
-                                  <span>
-                                    {comboItem?.inventoryProduct?.name || "-"}
-                                    {comboItem?.quantity > 1 && ` (x${comboItem.quantity})`}
-                                    {comboItem?.isGift && (
-                                      <span className="ml-1 text-xs text-green-600">(Tặng)</span>
-                                    )}
-                                  </span>
+                        <td className="py-3 px-4 text-gray-700">
+                          {mainProducts.length > 0 ? (
+                            <div className="space-y-1">
+                              {mainProducts.map((product, idx) => (
+                                <div key={idx} className="text-sm">
+                                  {product.name} x {product.quantity}
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-gray-500">-</span>
+                            "-"
                           )}
                         </td>
-                        <td className="py-3 px-4 text-gray-700">{item?.quantity}</td>
-                        <td className="py-3 px-4 text-gray-700">{item?.price && item?.quantity ? formatPrice(item.price / item.quantity) : "-"}</td>
+                        <td className="py-3 px-4 text-gray-700">
+                          {giftProducts.length > 0 ? (
+                            <div className="space-y-1">
+                              {giftProducts.map((product, idx) => (
+                                <div key={idx} className="text-sm text-green-600">
+                                  {product.name} x {product.quantity}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-gray-700">{item?.quantity || 0}</td>
                         <td className="py-3 px-4 text-right font-medium text-gray-900">
                           {item?.price ? formatPrice(item.price) : "-"}
                         </td>
@@ -654,7 +850,7 @@ export default function OrderDetailPage() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={5} className="text-center py-8 text-gray-500">
+                      <td colSpan={6} className="text-center py-8 text-gray-500">
                         Không có sản phẩm
                       </td>
                     </tr>
@@ -791,11 +987,286 @@ export default function OrderDetailPage() {
           onClose={() => {
             setFlowModalOpen(false)
             setFlowNotes("")
+            setSelectedLots({})
           }}
           title={`${flowAction === "PROCESS" ? "Xử lý đơn hàng" : flowAction === "SHIP" ? "Giao hàng" : "Xác nhận nhận hàng"}`}
-          description={flowAction === "PROCESS" ? "Xuất kho và đóng gói sản phẩm" : flowAction === "SHIP" ? "Xác nhận đã giao hàng" : "Xác nhận khách hàng đã nhận hàng"}
+
+          className={flowAction === "PROCESS" ? "max-w-4xl" : ""}
         >
           <div className="space-y-4">
+            {flowAction === "PROCESS" && (
+              <>
+                <div className="space-y-4 max-h-[60vh] overflow-y-auto border border-gray-200 rounded-md p-4">
+                  {isLoadingValidItems ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                      <span className="ml-2 text-sm text-gray-500">Đang tải danh sách lô hàng...</span>
+                    </div>
+                  ) : order?.items && order.items.length > 0 ? (
+                      // Sắp xếp theo số lượng combo giảm dần (số lượng lớn nhất trước)
+                      [...order.items].sort((a, b) => (b.quantity || 0) - (a.quantity || 0)).map((orderItem) => {
+                        if (!orderItem?.combo?.items || !Array.isArray(orderItem.combo.items)) {
+                          return null
+                        }
+
+                        // Lấy valid items cho các inventory products trong combo này
+                        const comboProductIds = orderItem.combo.items
+                          .map((item: any) => item?.inventoryProductId || item?.inventoryProduct?.id)
+                          .filter(Boolean)
+
+                        const validItemsForCombo = (Array.isArray(validItemsData) ? validItemsData.filter((v: any) =>
+                          comboProductIds.includes(v.productId)
+                        ) : []) || []
+
+                        if (validItemsForCombo.length === 0) {
+                          return (
+                            <div key={orderItem.id} className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                              <p className="text-sm text-yellow-800">
+                                <strong>{orderItem.combo.name}</strong> - Không có lô hàng còn hạn
+                              </p>
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <div key={orderItem.id} className="border border-gray-200 rounded-md p-4 space-y-3">
+                            <div className="flex items-center justify-between pb-2 border-b border-gray-200">
+                              <h4 className="font-semibold text-gray-900">{orderItem.combo.name}</h4>
+                              <span className="text-sm text-gray-500">Số lượng: {orderItem.quantity} combo</span>
+                            </div>
+
+                            {orderItem.combo.items.map((comboItem: any) => {
+                              // Có thể có inventoryProductId trực tiếp hoặc trong inventoryProduct.id
+                              const inventoryProductId = comboItem?.inventoryProductId || comboItem?.inventoryProduct?.id
+                              const productName = comboItem?.inventoryProduct?.name || "Sản phẩm không xác định"
+                              const requiredQuantity = (comboItem?.quantity || 0) * (orderItem.quantity || 0)
+                              const isGift = comboItem?.isGift
+
+                              const validItems = (Array.isArray(validItemsData) ? validItemsData.find((v: any) => v.productId === inventoryProductId)?.items : []) || []
+
+                              if (validItems.length === 0) {
+                                return (
+                                  <div key={inventoryProductId} className="p-2 bg-red-50 border border-red-200 rounded-md">
+                                    <p className="text-sm text-red-800">
+                                      <strong>{productName}</strong> {isGift && "(Tặng kèm)"} - Cần: {requiredQuantity} - Không có lô hàng còn hạn
+                                    </p>
+                                  </div>
+                                )
+                              }
+
+                              const totalAvailable = validItems.reduce((sum: number, item: any) => sum + item.quantity, 0)
+
+                              return (
+                                <div key={inventoryProductId} className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <span className="font-medium text-gray-900">{productName}</span>
+                                      {isGift && (
+                                        <span className="ml-2 text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded">
+                                          Tặng kèm
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-sm text-gray-600">
+                                      Cần: <strong>{requiredQuantity}</strong> | Có sẵn: <strong>{totalAvailable}</strong>
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-2 pl-4 border-l-2 border-gray-200">
+                                    {validItems.map((item: any) => {
+                                      const currentQuantity =
+                                        selectedLots[orderItem.id]?.[inventoryProductId]?.[item.id] || 0
+                                      
+                                      // Tính tổng số lượng đã chọn từ tất cả các lô cho sản phẩm này
+                                      const totalSelected = Object.values(selectedLots[orderItem.id]?.[inventoryProductId] || {}).reduce((sum: number, qty: any) => sum + (qty || 0), 0)
+                                      
+                                      // Số lượng còn thiếu để đạt requiredQuantity
+                                      const remainingNeeded = Math.max(0, requiredQuantity - (totalSelected - currentQuantity))
+                                      
+                                      // Tối đa có thể chọn cho lô này: không vượt quá số lượng có trong lô và số lượng còn thiếu
+                                      const maxQuantityForThisLot = Math.min(item.quantity, remainingNeeded)
+                                      
+                                      // Kiểm tra xem đã đủ số lượng chưa
+                                      const isQuantitySufficient = totalSelected >= requiredQuantity
+
+                                      return (
+                                        <div key={item.id} className={`flex items-center justify-between p-3 rounded-md border-2 ${
+                                          currentQuantity > 0 ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'
+                                        }`}>
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <span className="text-sm font-semibold text-gray-900">
+                                                Lô: {item.session.code}
+                                              </span>
+                                              {currentQuantity > 0 && (
+                                                <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-medium">
+                                                  Đã chọn: {currentQuantity}
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="text-xs text-gray-600 space-y-0.5">
+                                              <div>📅 HSD: <strong>{new Date(item.expiryDate).toLocaleDateString("vi-VN")}</strong></div>
+                                              <div>📦 Số lượng có: <strong>{item.quantity}</strong></div>
+                                              <div>📥 Nhập: {new Date(item.session.createdAt).toLocaleDateString("vi-VN")}</div>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center">
+                                            <input
+                                              type="text"
+                                              inputMode="numeric"
+                                              value={currentQuantity || ""}
+                                              onKeyDown={(e) => {
+                                                // Chỉ cho phép nhập số (0-9)
+                                                const isNumber = /^[0-9]$/.test(e.key)
+                                                
+                                                // Các phím điều hướng và điều khiển được phép
+                                                const allowedKeys = [
+                                                  "Backspace", "Delete", "Tab", "Escape", "Enter",
+                                                  "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
+                                                  "Home", "End"
+                                                ]
+                                                const isAllowedKey = allowedKeys.includes(e.key)
+                                                
+                                                // Cho phép Ctrl/Cmd + A, C, V, X
+                                                const isCtrlCmd = e.ctrlKey || e.metaKey
+                                                const isCopyPaste = isCtrlCmd && ["a", "c", "v", "x"].includes(e.key.toLowerCase())
+                                                
+                                                // Chặn tất cả các ký tự không phải số và không phải phím điều khiển
+                                                if (!isNumber && !isAllowedKey && !isCopyPaste) {
+                                                  e.preventDefault()
+                                                }
+                                              }}
+                                              onPaste={(e) => {
+                                                // Xử lý khi paste: chỉ lấy số
+                                                e.preventDefault()
+                                                const pastedText = e.clipboardData.getData("text")
+                                                const numbersOnly = pastedText.replace(/[^0-9]/g, "")
+                                                
+                                                if (numbersOnly) {
+                                                  // Tính toán max value
+                                                  const otherLotsTotal = Object.entries(selectedLots[orderItem.id]?.[inventoryProductId] || {})
+                                                    .filter(([lotId, _]) => lotId !== item.id)
+                                                    .reduce((sum, [_, qty]) => sum + (qty || 0), 0)
+                                                  const remainingNeeded = Math.max(0, requiredQuantity - otherLotsTotal)
+                                                  const maxForThisLot = Math.min(item.quantity, remainingNeeded)
+                                                  
+                                                  const numValue = parseInt(numbersOnly) || 0
+                                                  const value = Math.max(0, Math.min(maxForThisLot, numValue))
+                                                  
+                                                  setSelectedLots((prev) => {
+                                                    const newState = { ...prev }
+                                                    if (!newState[orderItem.id]) {
+                                                      newState[orderItem.id] = {}
+                                                    }
+                                                    if (!newState[orderItem.id][inventoryProductId]) {
+                                                      newState[orderItem.id][inventoryProductId] = {}
+                                                    }
+                                                    
+                                                    if (value === 0) {
+                                                      delete newState[orderItem.id][inventoryProductId][item.id]
+                                                    } else {
+                                                      newState[orderItem.id][inventoryProductId][item.id] = value
+                                                    }
+                                                    return newState
+                                                  })
+                                                  
+                                                  // Cập nhật giá trị hiển thị trong input
+                                                  e.currentTarget.value = String(value || "")
+                                                }
+                                              }}
+                                              onChange={(e) => {
+                                                // Chỉ lấy số từ input, loại bỏ tất cả ký tự không phải số
+                                                let inputValue = e.target.value.replace(/[^0-9]/g, "")
+                                                
+                                                // Nếu input rỗng, cho phép để người dùng có thể xóa hết
+                                                if (inputValue === "") {
+                                                  setSelectedLots((prev) => {
+                                                    const newState = { ...prev }
+                                                    if (!newState[orderItem.id]) {
+                                                      newState[orderItem.id] = {}
+                                                    }
+                                                    if (!newState[orderItem.id][inventoryProductId]) {
+                                                      newState[orderItem.id][inventoryProductId] = {}
+                                                    }
+                                                    delete newState[orderItem.id][inventoryProductId][item.id]
+                                                    return newState
+                                                  })
+                                                  return
+                                                }
+                                                
+                                                // Tính toán max value dựa trên số lượng đã chọn từ các lô khác
+                                                const otherLotsTotal = Object.entries(selectedLots[orderItem.id]?.[inventoryProductId] || {})
+                                                  .filter(([lotId, _]) => lotId !== item.id)
+                                                  .reduce((sum, [_, qty]) => sum + (qty || 0), 0)
+                                                const remainingNeeded = Math.max(0, requiredQuantity - otherLotsTotal)
+                                                const maxForThisLot = Math.min(item.quantity, remainingNeeded)
+                                                
+                                                // Parse và giới hạn giá trị
+                                                let numValue = parseInt(inputValue) || 0
+                                                
+                                                // Nếu giá trị nhập vào vượt quá max, tự động cắt về max
+                                                if (numValue > maxForThisLot) {
+                                                  numValue = maxForThisLot
+                                                  inputValue = String(maxForThisLot)
+                                                  // Cập nhật giá trị hiển thị
+                                                  e.target.value = inputValue
+                                                }
+                                                
+                                                // Giới hạn giá trị trong khoảng [0, maxForThisLot]
+                                                const value = Math.max(0, Math.min(maxForThisLot, numValue))
+                                                
+                                                setSelectedLots((prev) => {
+                                                  const newState = { ...prev }
+                                                  if (!newState[orderItem.id]) {
+                                                    newState[orderItem.id] = {}
+                                                  }
+                                                  if (!newState[orderItem.id][inventoryProductId]) {
+                                                    newState[orderItem.id][inventoryProductId] = {}
+                                                  }
+                                                  
+                                                  if (value === 0) {
+                                                    delete newState[orderItem.id][inventoryProductId][item.id]
+                                                  } else {
+                                                    newState[orderItem.id][inventoryProductId][item.id] = value
+                                                  }
+                                                  return newState
+                                                })
+                                                
+                                                // Đảm bảo giá trị hiển thị đúng
+                                                if (e.target.value !== inputValue) {
+                                                  e.target.value = inputValue
+                                                }
+                                              }}
+                                              onBlur={(e) => {
+                                                // Khi blur, đảm bảo giá trị hiển thị đúng với state
+                                                const current = selectedLots[orderItem.id]?.[inventoryProductId]?.[item.id] || 0
+                                                if (e.target.value !== String(current)) {
+                                                  e.target.value = String(current || "")
+                                                }
+                                              }}
+                                              className="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                              placeholder="0"
+                                            />
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        Không có sản phẩm trong đơn hàng
+                      </div>
+                    )}
+                  </div>
+              </>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Ghi chú (tùy chọn)
@@ -814,6 +1285,7 @@ export default function OrderDetailPage() {
                 onClick={() => {
                   setFlowModalOpen(false)
                   setFlowNotes("")
+                  setSelectedLots({})
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50"
               >
@@ -822,12 +1294,14 @@ export default function OrderDetailPage() {
               <button
                 type="button"
                 onClick={() => {
+                  const itemLots = buildItemLots()
                   flowMutation.mutate({
                     action: flowAction,
                     notes: flowNotes || undefined,
+                    itemLots,
                   })
                 }}
-                disabled={flowMutation.isPending}
+                disabled={flowMutation.isPending || (flowAction === "PROCESS" && isLoadingValidItems)}
                 className="px-4 py-2 bg-blue-600 !text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {flowMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
