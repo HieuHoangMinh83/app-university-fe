@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useMemo, useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   inventoryProductsApi,
@@ -26,6 +26,9 @@ import {
   Typography,
   Skeleton,
   Tabs,
+  Switch,
+  Row,
+  Col,
 } from "antd"
 import type { ColumnsType } from "antd/es/table"
 import {
@@ -41,8 +44,18 @@ const { Title } = Typography
 
 type ItemsTab = "all" | "valid" | "expired"
 
+// Hàm xóa dấu tiếng Việt
+function removeVietnameseAccents(str: string): string {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+}
+
 export default function InventoryProductsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const queryClient = useQueryClient()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -62,15 +75,44 @@ export default function InventoryProductsPage() {
   const [createForm] = Form.useForm<CreateInventoryProductDto>()
   const [editForm] = Form.useForm<UpdateInventoryProductDto>()
 
+  // Xử lý search param từ URL và xóa dấu khi vào trang
+  useEffect(() => {
+    const searchParam = searchParams.get("search")
+    if (searchParam) {
+      const decodedSearch = decodeURIComponent(searchParam)
+      const withoutAccents = removeVietnameseAccents(decodedSearch)
+      
+      // Nếu có dấu, cập nhật URL và state
+      if (decodedSearch !== withoutAccents) {
+        setSearchQuery(withoutAccents)
+        setPage(1)
+        
+        // Cập nhật URL với search đã xóa dấu
+        const params = new URLSearchParams(searchParams.toString())
+        params.set("search", encodeURIComponent(withoutAccents))
+        router.replace(`?${params.toString()}`, { scroll: false })
+      } else {
+        // Nếu không có dấu, chỉ set state
+        setSearchQuery(decodedSearch)
+      }
+    }
+  }, [searchParams, router])
+
+  // Reset page về 1 khi search query thay đổi
+  useEffect(() => {
+    setPage(1)
+  }, [searchQuery])
+
   const { data: productsResponse, isLoading } = useQuery({
-    queryKey: ["inventory-products", page, pageSize, categoryFilter, statusFilter],
+    queryKey: ["inventory-products", page, pageSize, categoryFilter, statusFilter, searchQuery],
     queryFn: async () => {
-      const params: { page?: number; pageSize?: number; categoryId?: string; status?: string } = {
+      const params: { page?: number; pageSize?: number; categoryId?: string; status?: string; search?: string } = {
         page,
         pageSize,
       }
       if (categoryFilter !== "all") params.categoryId = categoryFilter
       if (statusFilter !== "all") params.status = statusFilter
+      if (searchQuery && searchQuery.trim()) params.search = searchQuery.trim()
       const resp = await inventoryProductsApi.getAll(params)
       // Debug API response shape
       // eslint-disable-next-line no-console
@@ -154,23 +196,13 @@ export default function InventoryProductsPage() {
   const filteredProducts = useMemo(() => {
     if (!products) return []
     let data: InventoryProduct[] = products as InventoryProduct[]
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      data = data.filter(
-        (p: InventoryProduct) =>
-          p.name?.toLowerCase().includes(q) ||
-          p.description?.toLowerCase().includes(q) ||
-          p.category?.name?.toLowerCase().includes(q)
-      )
-    }
-    if (categoryFilter !== "all") {
-      data = data.filter((p: InventoryProduct) => p.categoryId === categoryFilter)
-    }
+    // Search đã được xử lý bởi API, chỉ filter category và status ở client nếu cần
+    // (API đã handle search và categoryId, nhưng có thể chưa handle status)
     if (statusFilter !== "all") {
       data = data.filter((p: InventoryProduct) => (statusFilter === "active" ? p.isActive : !p.isActive))
     }
     return data
-  }, [products, searchQuery, categoryFilter, statusFilter])
+  }, [products, statusFilter])
 
   const skeletonData = useMemo(
     () =>
@@ -259,7 +291,7 @@ export default function InventoryProductsPage() {
                     name: record.name,
                     description: record.description || undefined,
                     categoryId: record.categoryId,
-                    isActive: record.isActive,
+                    hasExpiryDate: record.hasExpiryDate ?? false,
                   })
                 }}
               >
@@ -362,14 +394,14 @@ export default function InventoryProductsPage() {
 
         <Card>
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
-            <Space style={{ width: "100%", flexWrap: "wrap" }} size={[12, 12]}>
+            <Space style={{ width: "100%", flexWrap: "wrap", justifyContent: "flex-end" }} size={[12, 12]}>
               <Input
                 allowClear
                 prefix={<SearchOutlined />}
                 placeholder="Tìm kiếm theo tên, mô tả hoặc danh mục..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ minWidth: 240, flex: 1 }}
+                style={{ minWidth: 240 }}
               />
               <Select
                 value={categoryFilter}
@@ -381,19 +413,6 @@ export default function InventoryProductsPage() {
                 options={[
                   { label: "Tất cả danh mục", value: "all" },
                   ...categories.map((c: Category) => ({ label: c?.name, value: c?.id })),
-                ]}
-              />
-              <Select
-                value={statusFilter}
-                onChange={(value) => {
-                  setStatusFilter(value)
-                  setPage(1)
-                }}
-                style={{ minWidth: 180 }}
-                options={[
-                  { label: "Tất cả trạng thái", value: "all" },
-                  { label: "Hoạt động", value: "active" },
-                  { label: "Không hoạt động", value: "inactive" },
                 ]}
               />
               <Button icon={<FilterOutlined />} onClick={() => setIsFilterOpen(true)}>
@@ -459,7 +478,7 @@ export default function InventoryProductsPage() {
               />
             </div>
             <div>
-              <div style={{ fontWeight: 500, marginBottom: 6 }}>Trạng thái</div>
+              <div style={{ fontWeight: 500, marginBottom: 6 }}>Trạng thái hoạt động</div>
               <Select
                 value={tempStatusFilter}
                 onChange={setTempStatusFilter}
@@ -511,7 +530,7 @@ export default function InventoryProductsPage() {
           <Form
             layout="vertical"
             form={createForm}
-            initialValues={{ isActive: true }}
+            initialValues={{ isActive: true, hasExpiryDate: true }}
             onFinish={(values) => createMutation.mutate(values)}
           >
             <Form.Item
@@ -530,20 +549,34 @@ export default function InventoryProductsPage() {
               <Input.TextArea rows={3} placeholder="Mô tả sản phẩm" />
             </Form.Item>
 
-            <Form.Item
-              label={
-                <>
-                  Danh mục <span style={{ color: "red" }}>*</span>
-                </>
-              }
-              name="categoryId"
-              rules={[{ required: true, message: "Danh mục là bắt buộc" }]}
-            >
-              <Select
-                placeholder="Chọn danh mục"
-                options={categories.map((c: Category) => ({ label: c?.name, value: c?.id }))}
-              />
-            </Form.Item>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  label={
+                    <>
+                      Danh mục <span style={{ color: "red" }}>*</span>
+                    </>
+                  }
+                  name="categoryId"
+                  rules={[{ required: true, message: "Danh mục là bắt buộc" }]}
+                >
+                  <Select
+                    placeholder="Chọn danh mục"
+                    options={categories.map((c: Category) => ({ label: c?.name, value: c?.id }))}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item 
+                  label="Có hạn sử dụng" 
+                  name="hasExpiryDate"
+                  valuePropName="checked"
+                  tooltip="Nếu bật, sản phẩm sẽ yêu cầu nhập ngày hết hạn khi nhập kho"
+                >
+                  <Switch />
+                </Form.Item>
+              </Col>
+            </Row>
 
             <Space style={{ width: "100%", justifyContent: "flex-end" }}>
               <Button
@@ -598,29 +631,34 @@ export default function InventoryProductsPage() {
               <Input.TextArea rows={3} placeholder="Mô tả sản phẩm" />
             </Form.Item>
 
-            <Form.Item
-              label={
-                <>
-                  Danh mục <span style={{ color: "red" }}>*</span>
-                </>
-              }
-              name="categoryId"
-              rules={[{ required: true, message: "Danh mục là bắt buộc" }]}
-            >
-              <Select
-                placeholder="Chọn danh mục"
-                options={categories.map((c: Category) => ({ label: c?.name, value: c?.id }))}
-              />
-            </Form.Item>
-
-            <Form.Item label="Trạng thái" name="isActive" valuePropName="checked">
-              <Select
-                options={[
-                  { label: "Hoạt động", value: true },
-                  { label: "Không hoạt động", value: false },
-                ]}
-              />
-            </Form.Item>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  label={
+                    <>
+                      Danh mục <span style={{ color: "red" }}>*</span>
+                    </>
+                  }
+                  name="categoryId"
+                  rules={[{ required: true, message: "Danh mục là bắt buộc" }]}
+                >
+                  <Select
+                    placeholder="Chọn danh mục"
+                    options={categories.map((c: Category) => ({ label: c?.name, value: c?.id }))}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item 
+                  label="Có hạn sử dụng" 
+                  name="hasExpiryDate"
+                  valuePropName="checked"
+                  tooltip="Nếu bật, sản phẩm sẽ yêu cầu nhập ngày hết hạn khi nhập kho"
+                >
+                  <Switch />
+                </Form.Item>
+              </Col>
+            </Row>
 
             <Space style={{ width: "100%", justifyContent: "flex-end" }}>
               <Button

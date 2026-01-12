@@ -619,29 +619,30 @@ export default function OrderDetailPage() {
                 <tbody>
                   {order?.items?.length > 0 ? (
                     order?.items?.map((item) => {
-                      // Lấy tên sản phẩm từ combo.storeProduct.name hoặc combo.items[0].inventoryProduct.name
-                      const productName = item?.combo?.storeProduct?.name 
-                        || item?.product?.name 
-                        || item?.combo?.items?.find((comboItem: any) => !comboItem?.isGift)?.inventoryProduct?.name 
-                        || "-"
-                      
                       return (
                       <tr key={item?.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                         <td className="py-3 px-4 font-medium text-gray-900">
-                          {productName}
+                          {item?.combo?.name || "-"}
                         </td>
                         <td className="py-3 px-4">
-                          <div>
-                            <div className="text-gray-900">{item?.combo?.name}</div>
-                            {item?.combo?.isPromotionActive && item?.combo?.promotionalPrice && (
-                              <div className="text-sm text-gray-500">
-                                <span className="line-through">{formatPrice(item?.combo?.price || 0)}</span>
-                                <span className="ml-2 text-red-500">
-                                  {formatPrice(item?.combo?.promotionalPrice || 0)}
-                                </span>
-                              </div>
-                            )}
-                          </div>
+                          {item?.combo?.items && item.combo.items.length > 0 ? (
+                            <div className="text-sm text-gray-600 space-y-1">
+                              {item.combo.items.map((comboItem: any, idx: number) => (
+                                <div key={comboItem?.id || idx} className="flex items-center gap-2">
+                                  <span className="text-gray-500">•</span>
+                                  <span>
+                                    {comboItem?.inventoryProduct?.name || "-"}
+                                    {comboItem?.quantity > 1 && ` (x${comboItem.quantity})`}
+                                    {comboItem?.isGift && (
+                                      <span className="ml-1 text-xs text-green-600">(Tặng)</span>
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-500">-</span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-gray-700">{item?.quantity}</td>
                         <td className="py-3 px-4 text-gray-700">{item?.price && item?.quantity ? formatPrice(item.price / item.quantity) : "-"}</td>

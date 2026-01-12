@@ -80,6 +80,7 @@ export interface GetInventoryProductsParams extends PaginationParams {
   expiryDateFrom?: string;
   expiryDateTo?: string;
   categoryId?: string;
+  search?: string;
 }
 
 export interface GetInventoryItemsParams extends PaginationParams {

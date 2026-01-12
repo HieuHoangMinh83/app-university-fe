@@ -382,7 +382,7 @@ export default function InventoryPage() {
             Quản lý kho
           </Title>
           <Link href="/inventory-import">
-            <Button type="primary" icon={<PlusOutlined />}>
+            <Button  icon={<PlusOutlined />}>
               Nhập kho
             </Button>
           </Link>

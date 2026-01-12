@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Loader2, ArrowLeft, Package, Trash2, ChevronLeft, ChevronRight, ChevronsUpDown, Check } from "lucide-react"
+import { Plus, Loader2, ArrowLeft, Package, Trash2, Pencil, ChevronLeft, ChevronRight, ChevronsUpDown, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -335,7 +335,7 @@ export default function InventoryImportPage() {
       
 
         {/* Import Form */}
-        <Card>
+        <Card className="shadow-none">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Danh sách sản phẩm nhập kho</CardTitle>
@@ -344,6 +344,7 @@ export default function InventoryImportPage() {
                 variant="outline"
                 size="sm"
                 onClick={addImportItem}
+                className="shadow-none"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Thêm sản phẩm
@@ -363,6 +364,7 @@ export default function InventoryImportPage() {
                       size="sm"
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1 || isLoadingProducts}
+                      className="shadow-none"
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -375,6 +377,7 @@ export default function InventoryImportPage() {
                       size="sm"
                       onClick={() => setPage(p => Math.min(paginationMeta.totalPages, p + 1))}
                       disabled={page >= paginationMeta.totalPages || isLoadingProducts}
+                      className="shadow-none"
                     >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
@@ -393,6 +396,7 @@ export default function InventoryImportPage() {
                     type="button"
                     variant="outline"
                     onClick={addImportItem}
+                    className="shadow-none"
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Thêm sản phẩm đầu tiên
@@ -404,11 +408,11 @@ export default function InventoryImportPage() {
                     <TableHeader className="sticky top-0 bg-white z-10">
                         <TableRow>
                           <TableHead className="w-12">STT</TableHead>
-                          <TableHead>Sản phẩm <span className="text-red-500">*</span></TableHead>
+                          <TableHead className="w-64">Sản phẩm <span className="text-red-500">*</span></TableHead>
                           <TableHead className="w-32">Số lượng <span className="text-red-500">*</span></TableHead>
                           <TableHead className="w-40">Ngày hết hạn <span className="text-red-500">*</span></TableHead>
                           <TableHead>Ghi chú</TableHead>
-                          <TableHead className="w-20">Hành động</TableHead>
+                          <TableHead className="w-20 whitespace-nowrap">Hành động</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -471,7 +475,7 @@ export default function InventoryImportPage() {
                               
                               {/* Custom Dropdown với absolute positioning */}
                               {productPopoverOpen[item.id] && (
-                                <div className="absolute z-50 w-full mt-1 rounded-md border bg-white shadow-lg max-h-[300px] overflow-y-auto">
+                                <div className="absolute z-50 w-full mt-1 rounded-md border bg-white max-h-[300px] overflow-y-auto">
                                   {isLoadingProducts ? (
                                     <div className="flex items-center justify-center p-4">
                                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -613,27 +617,27 @@ export default function InventoryImportPage() {
                               )
                             })()}
                           </TableCell>
-                          <TableCell>
-                            <Input
-                              type="text"
+                          <TableCell className="py-3">
+                            <Textarea
                               placeholder="Ghi chú (tùy chọn)"
                               value={item.notes || ""}
                               onChange={(e) => updateImportItem(item.id, "notes", e.target.value)}
-                              className="h-9"
+                              className="min-h-[60px] resize-none"
+                              rows={2}
                             />
                           </TableCell>
                           <TableCell>
-                            {importItems.length > 1 && (
+                            <div className="flex items-center justify-center">
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => removeImportItem(item.id)}
-                                className="h-8 w-8 text-red-500 hover:text-red-700"
+                                className="h-9 w-9 text-red-500 hover:text-red-700 shadow-none"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
-                            )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -655,10 +659,11 @@ export default function InventoryImportPage() {
                       toast.info("Đã xóa tất cả sản phẩm")
                     }}
                     disabled={importMutation.isPending}
+                    className="shadow-none"
                   >
                     Xóa tất cả
                   </Button>
-                  <Button type="button" onClick={onSubmitImport} disabled={importMutation.isPending}>
+                  <Button type="button" className="!text-white" onClick={onSubmitImport} disabled={importMutation.isPending}>
                     {importMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Nhập kho ({importItems.length} sản phẩm)
                   </Button>
@@ -670,19 +675,19 @@ export default function InventoryImportPage() {
 
         {/* Dialog xác nhận nhập kho */}
         <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto shadow-none">
             <DialogHeader>
               <DialogTitle>Xác nhận nhập kho</DialogTitle>
             </DialogHeader>
             
-            <div className="space-y-4">
+            <div className="space-y-4 ">
               <div>
-                <Label htmlFor="sessionDescription">
+                <Label htmlFor="sessionDescription mb-4">
                   Mô tả cho lần nhập kho này
                 </Label>
                 <Textarea
                   id="sessionDescription"
-                  className="mt-2"
+                  className=""
                   placeholder="Ví dụ: Nhập kho lô 10/12, Nhập từ nhà cung cấp ABC..."
                   rows={3}
                   value={sessionDescription}
@@ -744,12 +749,14 @@ export default function InventoryImportPage() {
                   setSessionDescription("")
                 }}
                 disabled={importMutation.isPending}
+                className="shadow-none"
               >
                 Hủy
               </Button>
               <Button
                 onClick={handleConfirmImport}
                 disabled={importMutation.isPending}
+                className="shadow-none"
               >
                 {importMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Xác nhận nhập kho

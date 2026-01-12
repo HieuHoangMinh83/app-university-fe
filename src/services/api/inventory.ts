@@ -112,6 +112,32 @@ export interface InventoryTransaction {
   createdAt: string;
 }
 
+export interface SessionWithTransactions {
+  code: string;
+  type: "IMPORT" | "EXPORT";
+  description: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdBy: {
+    id: string;
+    name: string;
+    phone: string;
+  } | null;
+  order: {
+    id: string;
+    totalPrice: number;
+    status: string;
+    client: {
+      id: string;
+      name: string;
+    };
+  } | null;
+  transactions: InventoryTransaction[];
+  _count: {
+    transactions: number;
+  };
+}
+
 export const inventoryApi = {
   // Tạo session nhập/xuất kho
   createSession: async (data: CreateSessionDto): Promise<InventorySession> => {
@@ -169,6 +195,64 @@ export const inventoryApi = {
     });
     const data = response.data?.data || response.data;
     return Array.isArray(data) ? data : [];
+  },
+
+  // Lấy danh sách sessions kèm transactions (có phân trang)
+  getSessionsWithTransactions: async (params?: {
+    type?: "IMPORT" | "EXPORT";
+    orderId?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<PaginatedResponse<SessionWithTransactions>> => {
+    const cleanParams: Record<string, any> = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        const value = params[key as keyof typeof params];
+        if (value !== undefined && value !== null) {
+          cleanParams[key] = value;
+        }
+      });
+    }
+    const response = await apiClient.get("/inventory/sessions-with-transactions", {
+      params: cleanParams,
+    });
+    
+    // Handle response structure: { data: [...], pagination: {...} }
+    if (response?.data?.data && Array.isArray(response.data.data) && response?.data?.pagination) {
+      return {
+        data: response.data.data,
+        meta: {
+          page: response.data.pagination.page,
+          pageSize: response.data.pagination.pageSize,
+          total: response.data.pagination.total,
+          totalPages: response.data.pagination.totalPages,
+        },
+      };
+    }
+    
+    // Handle nested structure: { statusCode, message, data: { data: [...], pagination: {...} } }
+    if (response?.data?.statusCode && response?.data?.data?.data && Array.isArray(response.data.data.data) && response?.data?.data?.pagination) {
+      return {
+        data: response.data.data.data,
+        meta: {
+          page: response.data.data.pagination.page,
+          pageSize: response.data.data.pagination.pageSize,
+          total: response.data.data.pagination.total,
+          totalPages: response.data.data.pagination.totalPages,
+        },
+      };
+    }
+    
+    // Fallback
+    return {
+      data: [],
+      meta: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
   },
 };
 

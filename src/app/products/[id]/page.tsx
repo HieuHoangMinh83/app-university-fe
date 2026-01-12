@@ -409,7 +409,7 @@ export default function ProductDetailPage() {
 
 
         {/* Main Card Container */}
-        <Card className="shadow-sm border-gray-200">
+        <Card className="border-gray-200">
           <div className="p-6 pb-3">
             <Breadcrumb>
               <BreadcrumbList>
@@ -430,11 +430,11 @@ export default function ProductDetailPage() {
           <CardContent className="p-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               {/* Card 1: Hình ảnh & Mô tả */}
-              <Card className="shadow-md border-gray-200 overflow-hidden">
+              <Card className="border-gray-200 overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100/50 pb-4">
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-                      <div className="p-2 bg-white rounded-lg shadow-sm">
+                      <div className="p-2 bg-white rounded-lg">
                         <ImageIcon className="h-4 w-4 text-blue-600" />
                       </div>
                       Hình ảnh & Mô tả sản phẩm
@@ -458,7 +458,7 @@ export default function ProductDetailPage() {
                         Hình ảnh
                       </Label>
                       {product?.image ? (
-                        <div className="relative aspect-square w-full max-w-[200px] mx-auto rounded-xl overflow-hidden border-2 border-gray-100 bg-gradient-to-br from-gray-50 to-gray-100 shadow-md group">
+                        <div className="relative aspect-square w-full max-w-[200px] mx-auto rounded-xl overflow-hidden border-2 border-gray-100 bg-gradient-to-br from-gray-50 to-gray-100 group">
                           <Image
                             src={product.image}
                             alt={product?.name || "Product image"}
@@ -470,7 +470,7 @@ export default function ProductDetailPage() {
                       ) : (
                         <div className="relative aspect-square w-full max-w-[200px] mx-auto rounded-xl overflow-hidden border-2 border-dashed border-gray-300 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
                           <div className="text-center text-gray-400">
-                            <div className="p-3 bg-white rounded-full mb-3 inline-block shadow-sm">
+                            <div className="p-3 bg-white rounded-full mb-3 inline-block">
                               <ImageIcon className="h-8 w-8 opacity-50" />
                             </div>
                             <p className="text-xs font-medium">Chưa có hình ảnh</p>
@@ -487,7 +487,7 @@ export default function ProductDetailPage() {
                       </Label>
                       {product?.description ? (
                         <div
-                          className="min-h-[200px] p-5 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none shadow-sm"
+                          className="min-h-[200px] p-5 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none"
                           dangerouslySetInnerHTML={{ __html: product.description }}
                         />
                       ) : (
@@ -501,11 +501,11 @@ export default function ProductDetailPage() {
               </Card>
 
               {/* Card 2: Thông tin sản phẩm */}
-              <Card className="shadow-md border-gray-200 overflow-hidden">
+              <Card className="border-gray-200 overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100/50 pb-4">
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-                      <div className="p-2 bg-white rounded-lg shadow-sm">
+                      <div className="p-2 bg-white rounded-lg">
                         <FileText className="h-4 w-4 text-blue-600" />
                       </div>
                       Thông tin sản phẩm
@@ -611,7 +611,7 @@ export default function ProductDetailPage() {
                   </CardTitle>
                   <Dialog open={isAddComboOpen} onOpenChange={setIsAddComboOpen}>
                     <DialogTrigger asChild>
-                      <Button size="sm" className="gap-2 shadow-sm bg-blue-600 hover:bg-blue-700 text-white">
+                      <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
                         <Plus className="h-4 w-4" />
                         Thêm option
                       </Button>
@@ -831,7 +831,7 @@ export default function ProductDetailPage() {
                                               
                                               {/* Custom Dropdown với absolute positioning */}
                                               {productPopoverOpen[itemIndex] && (
-                                                <div className="absolute z-50 w-full mt-1 rounded-md border bg-white shadow-lg max-h-[300px] overflow-y-auto">
+                                                <div className="absolute z-50 w-full mt-1 rounded-md border bg-white max-h-[300px] overflow-y-auto">
                                                   {inventoryProducts?.filter((ip: any) => {
                                                     if (ip?.isActive === false) return false
                                                     const searchValue = productSearchValues[itemIndex]?.toLowerCase() || ""
@@ -1007,7 +1007,7 @@ export default function ProductDetailPage() {
                                               
                                               {/* Custom Dropdown với absolute positioning */}
                                               {productPopoverOpen[itemIndex] && (
-                                                <div className="absolute z-50 w-full mt-1 rounded-md border bg-white shadow-lg max-h-[300px] overflow-y-auto">
+                                                <div className="absolute z-50 w-full mt-1 rounded-md border bg-white max-h-[300px] overflow-y-auto">
                                                   {inventoryProducts?.filter((ip: any) => {
                                                     if (ip?.isActive === false) return false
                                                     const searchValue = productSearchValues[itemIndex]?.toLowerCase() || ""
@@ -1354,7 +1354,7 @@ export default function ProductDetailPage() {
                                               </button>
                                               
                                               {productPopoverOpen[itemIndex] && (
-                                                <div className="absolute z-50 w-full mt-1 rounded-md border bg-white shadow-lg max-h-[300px] overflow-y-auto">
+                                                <div className="absolute z-50 w-full mt-1 rounded-md border bg-white max-h-[300px] overflow-y-auto">
                                                   {inventoryProducts?.filter((ip: any) => {
                                                     if (ip?.isActive === false) return false
                                                     const searchValue = productSearchValues[itemIndex]?.toLowerCase() || ""
@@ -1520,7 +1520,7 @@ export default function ProductDetailPage() {
                                               </button>
                                               
                                               {productPopoverOpen[itemIndex] && (
-                                                <div className="absolute z-50 w-full mt-1 rounded-md border bg-white shadow-lg max-h-[300px] overflow-y-auto">
+                                                <div className="absolute z-50 w-full mt-1 rounded-md border bg-white max-h-[300px] overflow-y-auto">
                                                   {inventoryProducts?.filter((ip: any) => {
                                                     if (ip?.isActive === false) return false
                                                     const searchValue = productSearchValues[itemIndex]?.toLowerCase() || ""
@@ -1757,7 +1757,7 @@ export default function ProductDetailPage() {
                   </div>
                 ) : (
                   <div className="text-center py-16 text-gray-500">
-                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 mb-4 shadow-sm">
+                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 mb-4">
                       <ShoppingBag className="h-10 w-10 text-gray-400" />
                     </div>
                     <p className="text-base font-semibold mb-2 text-gray-700">Chưa có option nào</p>
@@ -1895,7 +1895,7 @@ export default function ProductDetailPage() {
                       <Eye className="h-4 w-4 text-blue-600" />
                       <Label className="text-sm font-semibold">Preview</Label>
                     </div>
-                    <div className="border-2 border-gray-200 rounded-lg p-4 bg-white shadow-sm">
+                    <div className="border-2 border-gray-200 rounded-lg p-4 bg-white">
                       {/* Image Preview */}
                       <div className="mb-4">
                         <Label className="text-xs text-gray-500 mb-2 block">Hình ảnh:</Label>
